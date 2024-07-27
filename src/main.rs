@@ -1,5 +1,5 @@
 mod ast;
-mod typeinference;
+mod infer;
 mod types;
 
 fn main() {

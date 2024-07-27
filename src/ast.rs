@@ -8,6 +8,6 @@ pub struct TypedVar(pub Var, pub Type);
 pub enum Ast<V> {
     Var(V),
     Int(i64),
-    Fun(V, Box<Self>),
+    Lam(V, Box<Self>),
     App(Box<Self>, Box<Self>),
 }
