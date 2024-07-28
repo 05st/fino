@@ -3,59 +3,54 @@ use ena::unify::InPlaceUnificationTable;
 use crate::ast::*;
 use crate::types::*;
 
-enum Constraint {
+#[derive(Clone, Debug)]
+pub enum Constraint {
     TypeEqual(Type, Type),
 }
 
-struct TypeInference {
-    unification_table: InPlaceUnificationTable<TypeVar>,
+pub struct TypeInference {
+    pub unification_table: InPlaceUnificationTable<TypeUniVar>,
 }
 
 impl TypeInference {
-    fn fresh_type_var(&mut self) -> TypeVar {
-        todo!()
+    pub fn fresh_type_uni_var(&mut self) -> TypeUniVar {
+        self.unification_table.new_key(None)
     }
 
-    fn synth(&mut self, env: im::HashMap<Var, Type>, ast: Ast<Var>) -> (Ast<TypedVar>, Vec<Constraint>, Type) {
+    pub fn synth(&mut self, env: im::HashMap<Var, Type>, ast: Ast<Var>) -> (Ast<TypedVar>, Vec<Constraint>, Type) {
         match ast {
             Ast::Var(var) => {
                 // Variable is guaranteed to be defined after name resolution
                 let var_type = &env[&var];
-
                 (
                     Ast::Var(TypedVar(var, var_type.clone())),
                     Vec::new(),
                     var_type.clone(),
                 )
             },
-
             Ast::Int(i) => (
                 Ast::Int(i),
                 Vec::new(),
                 Type::Int,
             ),
-
             Ast::Lam(param, body) => {
-                let param_type_var: TypeVar = self.fresh_type_var();
-                let new_env = env.update(param, Type::Var(param_type_var));
+                let param_uvar = self.fresh_type_uni_var();
+                let new_env = env.update(param, Type::UniVar(param_uvar));
 
                 let (body_ast, body_constraints, body_type) = self.synth(new_env, *body);
-
                 (
-                    Ast::Lam(TypedVar(param, Type::Var(param_type_var)), Box::new(body_ast)),
+                    Ast::Lam(TypedVar(param, Type::UniVar(param_uvar)), Box::new(body_ast)),
                     body_constraints,
-                    Type::Fun(Box::new(Type::Var(param_type_var)), Box::new(body_type)),
+                    Type::Fun(Box::new(Type::UniVar(param_uvar)), Box::new(body_type)),
                 )
             },
-
             Ast::App(fun, arg) => {
                 let (arg_ast, arg_constraints, arg_type) = self.synth(env.clone(), *arg);
                 
-                let ret_type = Type::Var(self.fresh_type_var());
+                let ret_type = Type::UniVar(self.fresh_type_uni_var());
                 let fun_type = Type::Fun(Box::new(arg_type), Box::new(ret_type.clone()));
 
                 let (fun_ast, fun_constraints) = self.check(env, *fun, fun_type);
-
                 (
                     Ast::App(Box::new(fun_ast), Box::new(arg_ast)),
                     arg_constraints
@@ -94,12 +89,13 @@ impl TypeInference {
 
     fn normalize_type(&mut self, unnorm: Type) -> Type {
         match unnorm {
-            Type::Var(var) => match self.unification_table.probe_value(var) {
-                Some(var_type) => self.normalize_type(var_type),
-                None => Type::Var(var),
+            Type::Var(_) | Type::Int | Type::Unit => unnorm,
+            Type::UniVar(uvar) => {
+                match self.unification_table.probe_value(uvar) {
+                    Some(bound_type) => self.normalize_type(bound_type),
+                    None => unnorm,
+                }
             },
-            Type::Int => Type::Int,
-            Type::Unit => Type::Unit,
             Type::Fun(unnorm_param_type, unnorm_ret_type) => {
                 let param_type = self.normalize_type(*unnorm_param_type);
                 let ret_type = self.normalize_type(*unnorm_ret_type);
@@ -108,39 +104,53 @@ impl TypeInference {
         }
     }
 
+    /* Note: Unification is done by using a disjoint-set data structure. It is important
+     *       to note the distinction made between type variables and unification variables.
+     *       A type variable is rigid, they are universally quantified, and they should not
+     *       be present anywhere during unification. They are only introduced through type
+     *       annotations as of now. When generalized types (type schemes) are instantiated,
+     *       any occurence of a type variable will be replaced by fresh unification variables.
+     *       A unification variable is flexible, they are placeholders for a rigid, concrete
+     *       type. This could be a type constant, function type, or even a type variable.
+     */
     fn unify(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), String> {
         let left = self.normalize_type(unnorm_left);
         let right = self.normalize_type(unnorm_right);
 
         match (left, right) {
-            (Type::Int, Type::Int) => Ok(()),
-            (Type::Unit, Type::Unit) => Ok(()),
+            (Type::Var(var_a), Type::Var(var_b)) => {
+                (var_a == var_b)
+                    .then_some(())
+                    .ok_or_else(|| String::from("Type mismatch"))
+            },
+            (Type::Int, Type::Int) | (Type::Unit, Type::Unit) => Ok(()),
             (Type::Fun(a_param, a_ret), Type::Fun(b_param, b_ret)) => {
                 self.unify(*a_param, *b_param)?;
                 self.unify(*a_ret, *b_ret)
             },
-            (Type::Var(a), Type::Var(b)) => {
+            (Type::UniVar(uvar_a), Type::UniVar(uvar_b)) => {
                 self.unification_table
-                    .unify_var_var(a, b)
+                    .unify_var_var(uvar_a, uvar_b)
                     .map_err(|(l, r)| String::from("Type mismatch"))
             },
-            (Type::Var(v), t) | (t, Type::Var(v)) => {
-                // TODO: Occurs check
+            (Type::UniVar(uvar), ty) | (ty, Type::UniVar(uvar)) => {
+                ty.occurs_check(uvar)
+                    .map_err(|t| String::from("Infinite type"))?;
+
                 self.unification_table
-                    .unify_var_value(v, Some(t))
+                    .unify_var_value(uvar, Some(ty))
                     .map_err(|(l, r)| String::from("Type mismatch"))
             },
             (left, right) => Err(String::from("Type mismatch")),
         }
     }
 
-    fn solve_constraints(&mut self, constraints: Vec<Constraint>) -> Result<(), String> {
+    pub fn solve_constraints(&mut self, constraints: Vec<Constraint>) -> Result<(), String> {
         for constraint in constraints {
             match constraint {
                 Constraint::TypeEqual(left, right) => self.unify(left, right)?,
             }
         }
-
         Ok(())
     }
 }

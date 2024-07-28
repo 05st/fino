@@ -1,10 +1,12 @@
 use crate::types::Type;
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
-pub struct Var(u32);
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Var(pub u32);
 
+#[derive(Debug)]
 pub struct TypedVar(pub Var, pub Type);
 
+#[derive(Debug)]
 pub enum Ast<V> {
     Var(V),
     Int(i64),
