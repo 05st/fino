@@ -12,6 +12,12 @@ pub struct TypeInference {
     pub unification_table: InPlaceUnificationTable<TypeUniVar>,
 }
 
+#[derive(Debug)]
+pub enum TypeError {
+    Mismatch(Type, Type),
+    Infinite(Type),
+}
+
 impl TypeInference {
     pub fn fresh_type_uni_var(&mut self) -> TypeUniVar {
         self.unification_table.new_key(None)
@@ -111,9 +117,9 @@ impl TypeInference {
      *       annotations as of now. When generalized types (type schemes) are instantiated,
      *       any occurence of a type variable will be replaced by fresh unification variables.
      *       A unification variable is flexible, they are placeholders for a rigid, concrete
-     *       type. This could be a type constant, function type, or even a type variable.
+     *       type. This could be a type constant, function type, or a type variable as well.
      */
-    fn unify(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), String> {
+    fn unify(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), TypeError> {
         let left = self.normalize_type(unnorm_left);
         let right = self.normalize_type(unnorm_right);
 
@@ -121,7 +127,7 @@ impl TypeInference {
             (Type::Var(var_a), Type::Var(var_b)) => {
                 (var_a == var_b)
                     .then_some(())
-                    .ok_or_else(|| String::from("Type mismatch"))
+                    .ok_or_else(|| TypeError::Mismatch(Type::Var(var_a), Type::Var(var_b)))
             },
             (Type::Int, Type::Int) | (Type::Unit, Type::Unit) => Ok(()),
             (Type::Fun(a_param, a_ret), Type::Fun(b_param, b_ret)) => {
@@ -131,21 +137,21 @@ impl TypeInference {
             (Type::UniVar(uvar_a), Type::UniVar(uvar_b)) => {
                 self.unification_table
                     .unify_var_var(uvar_a, uvar_b)
-                    .map_err(|(l, r)| String::from("Type mismatch"))
+                    .map_err(|(l, r)| TypeError::Mismatch(l, r))
             },
             (Type::UniVar(uvar), ty) | (ty, Type::UniVar(uvar)) => {
                 ty.occurs_check(uvar)
-                    .map_err(|t| String::from("Infinite type"))?;
+                    .map_err(|t| TypeError::Infinite(t))?;
 
                 self.unification_table
                     .unify_var_value(uvar, Some(ty))
-                    .map_err(|(l, r)| String::from("Type mismatch"))
+                    .map_err(|(l, r)| TypeError::Mismatch(l, r))
             },
-            (left, right) => Err(String::from("Type mismatch")),
+            (left, right) => Err(TypeError::Mismatch(left, right)),
         }
     }
 
-    pub fn solve_constraints(&mut self, constraints: Vec<Constraint>) -> Result<(), String> {
+    pub fn solve_constraints(&mut self, constraints: Vec<Constraint>) -> Result<(), TypeError> {
         for constraint in constraints {
             match constraint {
                 Constraint::TypeEqual(left, right) => self.unify(left, right)?,
