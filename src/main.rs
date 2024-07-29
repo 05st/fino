@@ -2,7 +2,7 @@ use ast::{Ast, Var};
 use clap::Parser;
 use ena::unify::InPlaceUnificationTable;
 use inference::{Constraint, TypeInference};
-use parser::parser;
+use parser::parse;
 use types::{Type, TypeVar};
 
 mod ast;
@@ -28,7 +28,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let input = std::fs::read_to_string(args.src).unwrap();
-    println!("{}", parser().parse(input));
+    parse(input);
 
     /*
     let mut inf = TypeInference {
