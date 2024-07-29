@@ -1,4 +1,5 @@
 use ast::{Ast, Var};
+use clap::Parser;
 use ena::unify::InPlaceUnificationTable;
 use inference::{Constraint, TypeInference};
 use types::{Type, TypeVar};
@@ -7,7 +8,24 @@ mod ast;
 mod inference;
 mod types;
 
+#[derive(clap::Parser, Debug)]
+struct Args {
+    // Input path
+    #[arg(default_value = "./", help = "Input path")]
+    src: String,
+
+    // Output path
+    #[arg(short, long, default_value = "a", help = "Output path")]
+    out: String,
+
+    // Input is a file rather than dir
+    #[arg(short, long, help = "Input is a file")]
+    file: bool,
+}
+
 fn main() {
+    let args = Args::parse();
+
     let mut inf = TypeInference {
         unification_table: InPlaceUnificationTable::new(),
     };
