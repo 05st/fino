@@ -19,7 +19,7 @@ pub enum TypeError {
 }
 
 impl TypeInference {
-    pub fn fresh_type_uni_var(&mut self) -> TypeUniVar {
+    pub fn fresh_uni_var(&mut self) -> TypeUniVar {
         self.unification_table.new_key(None)
     }
 
@@ -40,7 +40,7 @@ impl TypeInference {
                 Type::Int,
             ),
             Ast::Lam(param, body) => {
-                let param_uvar = self.fresh_type_uni_var();
+                let param_uvar = self.fresh_uni_var();
                 let new_env = env.update(param, Type::UniVar(param_uvar));
 
                 let (body_ast, body_constraints, body_type) = self.synth(new_env, *body);
@@ -53,7 +53,7 @@ impl TypeInference {
             Ast::App(fun, arg) => {
                 let (arg_ast, arg_constraints, arg_type) = self.synth(env.clone(), *arg);
                 
-                let ret_type = Type::UniVar(self.fresh_type_uni_var());
+                let ret_type = Type::UniVar(self.fresh_uni_var());
                 let fun_type = Type::Fun(Box::new(arg_type), Box::new(ret_type.clone()));
 
                 let (fun_ast, fun_constraints) = self.check(env, *fun, fun_type);
@@ -110,14 +110,13 @@ impl TypeInference {
         }
     }
 
-    /* Note: Unification is done by using a disjoint-set data structure. It is important
-     *       to note the distinction made between type variables and unification variables.
-     *       A type variable is rigid, they are universally quantified, and they should not
-     *       be present anywhere during unification. They are only introduced through type
-     *       annotations as of now. When generalized types (type schemes) are instantiated,
-     *       any occurence of a type variable will be replaced by fresh unification variables.
-     *       A unification variable is flexible, they are placeholders for a rigid, concrete
-     *       type. This could be a type constant, function type, or a type variable as well.
+    /* Note: It is important to note the distinction made between type variables and unification
+     *       variables. A type variable is rigid, they are universally quantified, and they should
+     *       not be present anywhere during unification. They are only introduced through type
+     *       annotations as of now. When generalized types (type schemes) are instantiated, any
+     *       occurence of a type variable will be replaced by fresh unification variables. A
+     *       unification variable is flexible, they are placeholders for a rigid, concrete type.
+     *       This could be a type constant, function type, or a type variable as well.
      */
     fn unify(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), TypeError> {
         let left = self.normalize_type(unnorm_left);

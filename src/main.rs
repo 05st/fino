@@ -1,10 +1,10 @@
 use ast::{Ast, Var};
 use ena::unify::InPlaceUnificationTable;
-use infer::{Constraint, TypeInference};
+use inference::{Constraint, TypeInference};
 use types::{Type, TypeVar};
 
 mod ast;
-mod infer;
+mod inference;
 mod types;
 
 fn main() {
@@ -19,9 +19,9 @@ fn main() {
             Var(1),
             Box::new(Ast::Var(Var(1))))));
     let (ast, constrs, typ) = inf.synth(im::HashMap::new(), ast);*/
-    let tv1 = inf.fresh_type_uni_var();
-    let tv2 = inf.fresh_type_uni_var();
-    let tv3 = inf.fresh_type_uni_var();
+    let tv1 = inf.fresh_uni_var();
+    let tv2 = inf.fresh_uni_var();
+    let tv3 = inf.fresh_uni_var();
     let res = inf.solve_constraints(
         vec![
             Constraint::TypeEqual(Type::UniVar(tv2), Type::Fun(Box::new(Type::Int), Box::new(Type::UniVar(tv3)))),
