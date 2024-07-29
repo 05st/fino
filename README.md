@@ -9,6 +9,4 @@ notably,
 - typeclasses
 - user-defined operators
 
-only type inference and user-defined operators are implemented at the moment
-ideally we would have equirecursive structural types instead of isorecursive
-nominal types but i don't know how to implement those (yet)
+ideally we would have equirecursive structural types instead but i don't know how to implement those (yet)

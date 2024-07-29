@@ -1,0 +1,9 @@
+type Maybe a = Nothing | Just a
+type Either a b = Left a | Right b
+type Nat = Zero | Succ Nat
+
+fn main x : unit -> unit
+    () = do
+        println "What is your name?"
+        let name = input ()
+        println ("Hello " + name + "!")

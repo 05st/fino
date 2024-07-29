@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-chumsky = "0.9.3"
 clap = { version = "4.5.11", features = ["derive"] }
 ena = "0.14.3"
 im = "15.1.0"
+logos = "0.14.0"
