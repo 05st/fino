@@ -8,7 +8,9 @@ mod inference;
 mod types;
 
 fn main() {
-    let mut inf = TypeInference { unification_table: InPlaceUnificationTable::new() };
+    let mut inf = TypeInference {
+        unification_table: InPlaceUnificationTable::new(),
+    };
     /*let ast = Ast::App(
         Box::new(Ast::Lam(
             Var(0),
@@ -22,13 +24,17 @@ fn main() {
     let tv1 = inf.fresh_uni_var();
     let tv2 = inf.fresh_uni_var();
     let tv3 = inf.fresh_uni_var();
-    let res = inf.solve_constraints(
-        vec![
-            Constraint::TypeEqual(Type::UniVar(tv2), Type::Fun(Box::new(Type::Int), Box::new(Type::UniVar(tv3)))),
-            Constraint::TypeEqual(Type::UniVar(tv1), Type::UniVar(tv2)),
-            Constraint::TypeEqual(Type::UniVar(tv2), Type::Fun(Box::new(Type::Int), Box::new(Type::Int)))
-        ]
-    );
+    let res = inf.solve_constraints(vec![
+        Constraint::TypeEqual(
+            Type::UniVar(tv2),
+            Type::Fun(Box::new(Type::Int), Box::new(Type::UniVar(tv3))),
+        ),
+        Constraint::TypeEqual(Type::UniVar(tv1), Type::UniVar(tv2)),
+        Constraint::TypeEqual(
+            Type::UniVar(tv2),
+            Type::Fun(Box::new(Type::Int), Box::new(Type::Int)),
+        ),
+    ]);
     println!("{:?}", res);
     println!("{:?}", inf.unification_table);
 }

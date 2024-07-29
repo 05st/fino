@@ -43,11 +43,11 @@ impl Type {
                 } else {
                     Ok(())
                 }
-            },
+            }
             Type::Fun(param, ret) => {
                 param.occurs_check(uvar).map_err(|_| self.clone())?;
                 ret.occurs_check(uvar).map_err(|_| self.clone())
-            },
+            }
         }
     }
 }
