@@ -38,7 +38,9 @@ impl TypeInference {
                     var_type.clone(),
                 )
             }
+
             Expr::Int(i) => (Expr::Int(i), Vec::new(), Type::Int),
+
             Expr::Lam(param, body) => {
                 let param_uvar = self.fresh_uni_var();
                 let new_env = env.update(param, Type::UniVar(param_uvar));
@@ -53,6 +55,7 @@ impl TypeInference {
                     Type::Fun(Box::new(Type::UniVar(param_uvar)), Box::new(body_type)),
                 )
             }
+
             Expr::App(fun, arg) => {
                 let (arg_ast, arg_constraints, arg_type) = self.infer_expr(env.clone(), *arg);
 
@@ -95,10 +98,12 @@ impl TypeInference {
     fn normalize_type(&mut self, unnorm: Type) -> Type {
         match unnorm {
             Type::Var(_) | Type::Int | Type::Unit => unnorm,
+
             Type::UniVar(uvar) => match self.unification_table.probe_value(uvar) {
                 Some(bound_type) => self.normalize_type(bound_type),
                 None => unnorm,
             },
+
             Type::Fun(unnorm_param_type, unnorm_ret_type) => {
                 let param_type = self.normalize_type(*unnorm_param_type);
                 let ret_type = self.normalize_type(*unnorm_ret_type);
@@ -123,15 +128,19 @@ impl TypeInference {
             (Type::Var(var_a), Type::Var(var_b)) => (var_a == var_b)
                 .then_some(())
                 .ok_or_else(|| TypeError::Mismatch(Type::Var(var_a), Type::Var(var_b))),
+
             (Type::Int, Type::Int) | (Type::Unit, Type::Unit) => Ok(()),
+
             (Type::Fun(a_param, a_ret), Type::Fun(b_param, b_ret)) => {
                 self.unify(*a_param, *b_param)?;
                 self.unify(*a_ret, *b_ret)
             }
+
             (Type::UniVar(uvar_a), Type::UniVar(uvar_b)) => self
                 .unification_table
                 .unify_var_var(uvar_a, uvar_b)
                 .map_err(|(l, r)| TypeError::Mismatch(l, r)),
+
             (Type::UniVar(uvar), ty) | (ty, Type::UniVar(uvar)) => {
                 ty.occurs_check(uvar).map_err(|t| TypeError::Infinite(t))?;
 
@@ -139,6 +148,7 @@ impl TypeInference {
                     .unify_var_value(uvar, Some(ty))
                     .map_err(|(l, r)| TypeError::Mismatch(l, r))
             }
+
             (left, right) => Err(TypeError::Mismatch(left, right)),
         }
     }
