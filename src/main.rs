@@ -1,8 +1,9 @@
-use clap::Parser;
-use parser::parse;
+use clap::Parser as _;
+use parser::Parser;
 
 mod ast;
 mod inference;
+mod lexer;
 mod parser;
 mod types;
 
@@ -24,7 +25,8 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let input = std::fs::read_to_string(args.src).unwrap();
-    parse(input);
+    let mut parser = Parser::new(&input);
+    parser.parse();
 
     /*
     let mut inf = TypeInference {

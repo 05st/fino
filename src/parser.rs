@@ -1,112 +1,48 @@
-use logos::Logos;
+use std::iter::Peekable;
 
-#[derive(Logos, Debug, PartialEq)]
-enum Token {
-    #[token("module")]
-    KwModule,
-    #[token("import")]
-    KwImport,
-    #[token("export")]
-    KwExport,
+use crate::{
+    ast::{Expr, Var},
+    lexer::Token,
+};
+use logos::{Lexer, Logos, Span};
 
-    #[token("fn")]
-    KwFn,
-    #[token("type")]
-    KwType,
-
-    #[token("let")]
-    KwLet,
-    #[token("in")]
-    KwIn,
-    #[token("if")]
-    KwIf,
-    #[token("else")]
-    KwElse,
-    #[token("match")]
-    KwMatch,
-    #[token("do")]
-    KwDo,
-
-    #[token("unit")]
-    KwUnit,
-    #[token("bool")]
-    KwBool,
-    #[token("char")]
-    KwChar,
-    #[token("str")]
-    KwStr,
-    #[token("i32")]
-    KwI32,
-    #[token("i64")]
-    KwI64,
-    #[token("u32")]
-    KwU32,
-    #[token("u64")]
-    KwU64,
-    #[token("f32")]
-    KwF32,
-    #[token("f64")]
-    KwF64,
-
-    #[token("true")]
-    KwTrue,
-    #[token("false")]
-    KwFalse,
-
-    #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| lex.slice().to_owned())]
-    LitString(String),
-
-    #[token("(")]
-    LeftParen,
-    #[token(")")]
-    RightParen,
-
-    #[token("=")]
-    Equal,
-    #[token("==")]
-    EqualEqual,
-
-    #[token(".")]
-    Dot,
-    #[token("+")]
-    Plus,
-    #[token("|")]
-    Bar,
-
-    #[token(":")]
-    Colon,
-    #[token("::")]
-    DoubleColon,
-
-    #[token("\\")]
-    Backslash,
-
-    #[token("->")]
-    SmallArrow,
-    #[token("=>")]
-    BigArrow,
-
-    #[regex(r"\n")]
-    Newline,
-    /* Note: We require indentations to be done with spaces
-     *       since the lexer determines if whitespace is
-     *       valid indentation by checking if the number of
-     *       whitespace characters is greater than or equal
-     *       to two. A tab character would only count as one
-     *       space.
-     */
-    #[regex(r"[ \t]+", |lex| lex.slice().chars().count() >= 2)]
-    Space(bool),
-
-    #[regex("[a-zA-Z][a-zA-Z0-9_]*", |lex| lex.slice().to_owned())]
-    Ident(String),
+enum ParseError {
+    EmptyInput,
+    UnexpectedToken(Span),
 }
 
-pub fn parse(input: String) {
-    for res in Token::lexer(&input) {
-        match res {
-            Ok(token) => println!("{:#?}", token),
-            Err(_) => panic!("Error"),
+type ParseResult<T> = Result<T, ParseError>;
+
+pub struct Parser<'s> {
+    lexer: Lexer<'s, Token>,
+}
+
+impl<'s> Parser<'s> {
+    pub fn new(source: &'s String) -> Self {
+        Self {
+            lexer: Token::lexer(source),
+        }
+    }
+
+    fn next(&mut self) -> ParseResult<Token> {
+        todo!()
+    }
+
+    fn peek(&self) -> Option<Token> {
+        todo!()
+    }
+
+    fn expect(&mut self, token: Token) -> ParseResult<()> {
+        todo!()
+    }
+
+    pub fn parse(&mut self) {
+        for res in self.lexer.clone() {
+            if let Ok(tok) = res {
+                println!("{:#?}", tok);
+            } else {
+                panic!("Error");
+            }
         }
     }
 }
