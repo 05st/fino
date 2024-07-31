@@ -1,9 +1,5 @@
-use ast::{Ast, Var};
 use clap::Parser;
-use ena::unify::InPlaceUnificationTable;
-use inference::{Constraint, TypeInference};
 use parser::parse;
-use types::{Type, TypeVar};
 
 mod ast;
 mod inference;

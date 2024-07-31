@@ -1,10 +1,10 @@
 use ena::unify::{EqUnifyValue, UnifyKey};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
-pub struct TypeVar(pub u32);
+pub struct TypeVar(u32);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
-pub struct TypeUniVar(pub u32);
+pub struct TypeUniVar(u32);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Type {

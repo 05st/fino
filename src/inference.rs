@@ -4,26 +4,26 @@ use crate::ast::*;
 use crate::types::*;
 
 #[derive(Clone, Debug)]
-pub enum Constraint {
+enum Constraint {
     TypeEqual(Type, Type),
 }
 
-pub struct TypeInference {
+struct TypeInference {
     pub unification_table: InPlaceUnificationTable<TypeUniVar>,
 }
 
 #[derive(Debug)]
-pub enum TypeError {
+enum TypeError {
     Mismatch(Type, Type),
     Infinite(Type),
 }
 
 impl TypeInference {
-    pub fn fresh_uni_var(&mut self) -> TypeUniVar {
+    fn fresh_uni_var(&mut self) -> TypeUniVar {
         self.unification_table.new_key(None)
     }
 
-    pub fn synth(
+    fn synth(
         &mut self,
         env: im::HashMap<Var, Type>,
         ast: Ast<Var>,
