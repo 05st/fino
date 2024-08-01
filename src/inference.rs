@@ -112,14 +112,13 @@ impl TypeInference {
         }
     }
 
-    /* Note: It is important to note the distinction made between type variables and unification
-     *       variables. A type variable is rigid, they are universally quantified, and they should
-     *       not be present anywhere during unification. They are only introduced through type
-     *       annotations as of now. When generalized types (type schemes) are instantiated, any
-     *       occurence of a type variable will be replaced by fresh unification variables. A
-     *       unification variable is flexible, they are placeholders for a rigid, concrete type.
-     *       This could be a type constant, function type, or a type variable as well.
-     */
+    // It is important to note the distinction made between type variables and unification
+    // variables. A type variable is rigid, they are universally quantified, and they should
+    // not be present anywhere during unification. They are only introduced through type
+    // annotations as of now. When generalized types (type schemes) are instantiated, any
+    // occurence of a type variable will be replaced by fresh unification variables. A
+    // unification variable is flexible, they are placeholders for a rigid, concrete type.
+    // This could be a type constant, function type, or a type variable as well.
     fn unify(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), TypeError> {
         let left = self.normalize_type(unnorm_left);
         let right = self.normalize_type(unnorm_right);

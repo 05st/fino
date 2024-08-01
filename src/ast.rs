@@ -14,12 +14,13 @@ pub enum Expr<V> {
     App(Box<Self>, Box<Self>),
 }
 
-#[derive(Debug)]
-struct FunctionId(u32);
 
+// An item is a top-level let-definition.
+// Functions are desugared into curried
+// lambda expressions by the parser.
 #[derive(Debug)]
-struct Function<V> {
-    id: FunctionId,
-    params: Vec<V>,
-    body: Expr<V>,
+struct Item<V> {
+    name: String,
+    type_ann: Type,
+    expr: Expr<V>,
 }
