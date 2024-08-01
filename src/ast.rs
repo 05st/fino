@@ -17,8 +17,12 @@ pub enum Expr<V> {
 // An item is a top-level let-definition. Functions are desugared into curried
 // lambda expressions by the parser.
 #[derive(Debug)]
-struct Item<V> {
+pub struct Item<V> {
     name: String,
     type_ann: Type,
     expr: Expr<V>,
+}
+
+pub struct Module<V> {
+    pub items: Vec<Item<V>>,
 }

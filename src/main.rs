@@ -25,7 +25,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let input = std::fs::read_to_string(args.src).unwrap();
-    let mut parser = Parser::new(&input);
+    let mut parser = Parser::new(&input).unwrap();
     parser.parse();
 
     /*

@@ -1,48 +1,68 @@
-use std::iter::Peekable;
+use std::{collections::VecDeque, iter::Peekable};
 
 use crate::{
-    ast::{Expr, Var},
+    ast::{Expr, Module, Var},
     lexer::Token,
 };
 use logos::{Lexer, Logos, Span};
 
-enum ParseError {
-    EmptyInput,
+#[derive(Debug)]
+pub enum ParseError {
+    ReachedEnd,
     UnexpectedToken(Span),
+    TokenMismatch(Token, Token, Span)
 }
 
 type ParseResult<T> = Result<T, ParseError>;
 
-pub struct Parser<'s> {
-    lexer: Lexer<'s, Token>,
+pub struct Parser {
+    tokens: VecDeque<(Token, Span)>,
 }
 
-impl<'s> Parser<'s> {
-    pub fn new(source: &'s String) -> Self {
-        Self {
-            lexer: Token::lexer(source),
-        }
-    }
+impl Parser {
+    pub fn new(input: &String) -> ParseResult<Self> {
+        let mut tokens = VecDeque::new();
+        let lexer = Token::lexer(input).spanned();
 
-    fn next(&mut self) -> ParseResult<Token> {
-        todo!()
-    }
-
-    fn peek(&self) -> Option<Token> {
-        todo!()
-    }
-
-    fn expect(&mut self, token: Token) -> ParseResult<()> {
-        todo!()
-    }
-
-    pub fn parse(&mut self) {
-        for res in self.lexer.clone() {
-            if let Ok(tok) = res {
-                println!("{:#?}", tok);
-            } else {
-                panic!("Error");
+        for lex in lexer {
+            match lex {
+                (Ok(token), span) => tokens.push_back((token, span)),
+                (Err(_), span) => return Err(ParseError::UnexpectedToken(span)),
             }
         }
+
+        Ok(Self { tokens })
+    }
+
+    // Advance token stream
+    fn next(&mut self) -> ParseResult<Token> {
+        self.tokens.pop_back().map(|t| t.0).ok_or(ParseError::ReachedEnd)
+    }
+
+    // Peek current token
+    fn peek(&mut self) -> ParseResult<&Token> {
+        self.tokens.back().map(|t| &t.0).ok_or(ParseError::ReachedEnd)
+    }
+
+    // Span of current token
+    fn span(&mut self) -> ParseResult<Span> {
+        self.tokens.back().map(|t| t.1.clone()).ok_or(ParseError::ReachedEnd)
+    }
+
+    // Consume specific token variant
+    fn expect(&mut self, expected: Token) -> ParseResult<Token> {
+        let current = self.peek()?;
+        if std::mem::discriminant(current) == std::mem::discriminant(&expected) {
+            Ok(self.next()?)
+        } else {
+            Err(ParseError::TokenMismatch(current.clone(), expected, self.span()?))
+        }
+    }
+
+    pub fn parse(&mut self) -> ParseResult<Module<Var>> {
+        for (token, span) in self.tokens.clone().into_iter() {
+            println!("{:#?}", token);
+        }
+        Ok(Module { items: Vec::new() })
     }
 }
