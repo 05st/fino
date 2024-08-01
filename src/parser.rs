@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, iter::Peekable};
+use std::collections::VecDeque;
 
 use crate::{
     ast::{Expr, Module, Var},
@@ -36,17 +36,17 @@ impl Parser {
 
     // Advance token stream
     fn next(&mut self) -> ParseResult<Token> {
-        self.tokens.pop_back().map(|t| t.0).ok_or(ParseError::ReachedEnd)
+        self.tokens.pop_front().map(|t| t.0).ok_or(ParseError::ReachedEnd)
     }
 
     // Peek current token
     fn peek(&mut self) -> ParseResult<&Token> {
-        self.tokens.back().map(|t| &t.0).ok_or(ParseError::ReachedEnd)
+        self.tokens.front().map(|t| &t.0).ok_or(ParseError::ReachedEnd)
     }
 
     // Span of current token
     fn span(&mut self) -> ParseResult<Span> {
-        self.tokens.back().map(|t| t.1.clone()).ok_or(ParseError::ReachedEnd)
+        self.tokens.front().map(|t| t.1.clone()).ok_or(ParseError::ReachedEnd)
     }
 
     // Consume specific token variant
@@ -60,6 +60,8 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> ParseResult<Module<Var>> {
+        let next = self.next()?;
+        println!("{:#?}", next);
         for (token, span) in self.tokens.clone().into_iter() {
             println!("{:#?}", token);
         }
