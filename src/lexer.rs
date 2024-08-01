@@ -95,15 +95,14 @@ pub enum Token {
     #[token("=>")]
     BigArrow,
 
-    // The indent token also consumes a newline
-    // to distinguish it from whitespace which
-    // is skipped by the Space token.
+    // The indent token also consumes a newline to distinguish it from whitespace
+    // which is skipped by the Space token.
     #[regex(r"\n(?:  |\t)(?: \t)*")]
     Indent,
-    #[regex(r"[ \t]+", skip)]
-    Space,
     #[regex(r"\n")]
     Newline,
+    #[regex(r"[ \t]+", skip)]
+    Space,
 
     #[regex(r"[a-zA-Z]\w*", |lex| lex.slice().to_owned())]
     Identifier(String),

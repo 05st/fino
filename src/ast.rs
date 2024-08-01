@@ -14,9 +14,7 @@ pub enum Expr<V> {
     App(Box<Self>, Box<Self>),
 }
 
-
-// An item is a top-level let-definition.
-// Functions are desugared into curried
+// An item is a top-level let-definition. Functions are desugared into curried
 // lambda expressions by the parser.
 #[derive(Debug)]
 struct Item<V> {
