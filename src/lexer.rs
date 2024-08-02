@@ -1,6 +1,14 @@
-use logos::{skip, Logos};
+use logos::{skip, FilterResult, Lexer, Logos};
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub enum LexerError {
+    IncorrectIndent(usize, usize),
+    #[default]
+    Default
+}
 
 #[derive(Clone, Debug, Logos, PartialEq)]
+#[logos(extras = Vec<usize>, error = LexerError)]
 pub enum Token {
     #[token("module")]
     KwModule,
@@ -97,13 +105,39 @@ pub enum Token {
 
     // The indent token also consumes a newline to distinguish it from whitespace
     // which is skipped by the Space token.
-    #[regex(r"\n(?:  |\t)(?: \t)*")]
+    #[regex(r"\n[ \t]*", whitespace_callback)]
     Indent,
-    #[regex(r"\n")]
+    Dedent,
     Newline,
+
     #[regex(r"[ \t]+", skip)]
     Space,
 
     #[regex(r"[a-zA-Z]\w*", |lex| lex.slice().to_owned())]
     Identifier(String),
+}
+
+fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
+    let cur_col = lexer.extras.last().copied().unwrap_or(0);
+    let new_col = lexer.slice().chars().filter(|ch| *ch == ' ' || *ch == '\t').count();
+
+    match new_col.cmp(&cur_col) {
+        std::cmp::Ordering::Less => {
+            lexer.extras.pop().expect("lexer whitespace_callback new_col < 0");
+            
+            let prev_col = lexer.extras.last().copied().unwrap_or(0);
+            if new_col != prev_col {
+                FilterResult::Error(LexerError::IncorrectIndent(new_col, prev_col))
+            } else {
+                FilterResult::Emit(Token::Dedent)
+            }
+        }
+
+        std::cmp::Ordering::Equal => FilterResult::Emit(Token::Newline),
+
+        std::cmp::Ordering::Greater => {
+            lexer.extras.push(new_col);
+            FilterResult::Emit(Token::Indent)
+        }
+    }
 }

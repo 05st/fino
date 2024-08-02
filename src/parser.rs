@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use crate::{
     ast::{Expr, Item, Module},
-    lexer::Token,
+    lexer::{LexerError, Token}, types::Type,
 };
 use logos::{Lexer, Logos, Span};
 
@@ -10,7 +10,8 @@ use logos::{Lexer, Logos, Span};
 pub enum ParseError {
     ReachedEnd,
     UnexpectedToken(Span),
-    TokenMismatch(Token, Token, Span),
+    TokenMismatch(String, Span),
+    IncorrectIndent(usize, usize, Span),
 }
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -27,8 +28,17 @@ impl Parser {
         for lex in lexer {
             match lex {
                 (Ok(token), span) => tokens.push_back((token, span)),
-                (Err(_), span) => return Err(ParseError::UnexpectedToken(span)),
+                (Err(lexer_error), span) => return {
+                    match lexer_error {
+                        LexerError::IncorrectIndent(got, exp) => Err(ParseError::IncorrectIndent(got, exp, span)),
+                        LexerError::Default => Err(ParseError::UnexpectedToken(span)),
+                    }
+                }
             }
+        }
+
+        for tok in tokens.clone() {
+            println!("{:#?}", tok);
         }
 
         Ok(Self { tokens })
@@ -61,23 +71,42 @@ impl Parser {
     // Consume specific token variant
     fn expect(&mut self, expected: Token) -> ParseResult<Token> {
         let current = self.peek()?;
+
         if std::mem::discriminant(current) == std::mem::discriminant(&expected) {
             Ok(self.next()?)
         } else {
             Err(ParseError::TokenMismatch(
-                current.clone(),
-                expected,
+                format!("{:?}", expected),
                 self.span()?,
             ))
         }
     }
 
-    // Parse and desugar top-level fn definition
-    fn parse_function(&mut self) -> ParseResult<Item> {
+    fn parse_type_ann(&mut self) -> ParseResult<Type> {
         todo!()
     }
 
+    // Parse and desugar top-level fn definition
+    fn parse_function(&mut self) -> ParseResult<Item> {
+        self.expect(Token::KwFn)?;
+
+        if let Token::Identifier(fn_name) = self.peek()? {
+            self.next()?;
+
+            self.expect(Token::Colon)?;
+            let type_ann = self.parse_type_ann()?;
+            self.expect(Token::Indent)?;
+
+            todo!()
+        } else {
+            Err(ParseError::TokenMismatch(String::from("identifier"), self.span()?))
+        }
+    }
+
     pub fn parse(&mut self) -> ParseResult<Module> {
-        todo!()
+        let items = vec![self.parse_function()?];
+        Ok(Module {
+            items,
+        })
     }
 }
