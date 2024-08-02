@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
 use ena::unify::InPlaceUnificationTable;
 
 use crate::ast::*;
 use crate::types::*;
+
+type TypeEnv = im::HashMap<DefId, Type>;
 
 #[derive(Clone, Debug)]
 enum Constraint {
@@ -10,6 +14,7 @@ enum Constraint {
 
 struct TypeInference {
     pub unification_table: InPlaceUnificationTable<TypeUniVar>,
+    expr_type_map: HashMap<NodeId, Type>,
 }
 
 #[derive(Debug)]
@@ -23,48 +28,51 @@ impl TypeInference {
         self.unification_table.new_key(None)
     }
 
-    fn infer_expr(
-        &mut self,
-        env: im::HashMap<Var, Type>,
-        ast: Expr<Var>,
-    ) -> (Expr<TypedVar>, Vec<Constraint>, Type) {
-        match ast {
-            Expr::Var(var) => {
-                // Variable is guaranteed to be defined after name resolution
-                let var_type = &env[&var];
+    fn infer_expr(&mut self, env: TypeEnv, expr: Expr) -> (Vec<Constraint>, Type) {
+        match expr {
+            Expr::Lit { id, literal } => {
                 (
-                    Expr::Var(TypedVar(var, var_type.clone())),
+                    Vec::new(),
+                    match literal {
+                        Lit::Int(_) => Type::Const(String::from("i32")),
+                        Lit::Float(_) => Type::Const(String::from("f32")),
+                        Lit::String(_) => Type::Const(String::from("str")),
+                        Lit::Char(_) => Type::Const(String::from("char")),
+                        Lit::Bool(_) => Type::Const(String::from("bool")),
+                        Lit::Unit => Type::Const(String::from("unit")),
+                    }
+                )
+            }
+
+            Expr::Var { id, def_id, name } => {
+                // Variable is guaranteed to be defined after name resolution
+                let var_type = &env[&def_id];
+
+                (
                     Vec::new(),
                     var_type.clone(),
                 )
             }
 
-            Expr::Int(i) => (Expr::Int(i), Vec::new(), Type::Int),
-
-            Expr::Lam(param, body) => {
+            Expr::Lam { id, param, param_def_id, body } => {
                 let param_uvar = self.fresh_uni_var();
-                let new_env = env.update(param, Type::UniVar(param_uvar));
+                let new_env = env.update(param_def_id, Type::UniVar(param_uvar));
 
-                let (body_ast, body_constraints, body_type) = self.infer_expr(new_env, *body);
+                let (body_constraints, body_type) = self.infer_expr(new_env, *body);
                 (
-                    Expr::Lam(
-                        TypedVar(param, Type::UniVar(param_uvar)),
-                        Box::new(body_ast),
-                    ),
                     body_constraints,
                     Type::Fun(Box::new(Type::UniVar(param_uvar)), Box::new(body_type)),
                 )
             }
 
-            Expr::App(fun, arg) => {
-                let (arg_ast, arg_constraints, arg_type) = self.infer_expr(env.clone(), *arg);
+            Expr::App { id, fun, arg } => {
+                let (arg_constraints, arg_type) = self.infer_expr(env.clone(), *arg);
 
                 let ret_type = Type::UniVar(self.fresh_uni_var());
                 let fun_type = Type::Fun(Box::new(arg_type), Box::new(ret_type.clone()));
 
-                let (fun_ast, fun_constraints) = self.check_expr(env, *fun, fun_type);
+                let fun_constraints = self.check_expr(env, *fun, fun_type);
                 (
-                    Expr::App(Box::new(fun_ast), Box::new(arg_ast)),
                     arg_constraints.into_iter().chain(fun_constraints).collect(),
                     ret_type,
                 )
@@ -72,37 +80,30 @@ impl TypeInference {
         }
     }
 
-    fn check_expr(
-        &mut self,
-        env: im::HashMap<Var, Type>,
-        ast: Expr<Var>,
-        exp_type: Type,
-    ) -> (Expr<TypedVar>, Vec<Constraint>) {
-        match (ast, exp_type) {
-            (Expr::Int(i), Type::Int) => (Expr::Int(i), Vec::new()),
-
-            (Expr::Lam(param, body), Type::Fun(param_type, ret_type)) => {
-                let new_env = env.update(param, *param_type);
+    fn check_expr(&mut self, env: TypeEnv, expr: Expr, expected_type: Type) -> Vec<Constraint> {
+        match (expr, expected_type) {
+            (Expr::Lam { id, param, param_def_id, body }, Type::Fun(param_type, ret_type)) => {
+                let new_env = env.update(param_def_id, *param_type);
                 self.check_expr(new_env, *body, *ret_type)
             }
 
-            (ast, exp_type) => {
-                let (typed_ast, mut constraints, inferred_type) = self.infer_expr(env, ast);
-                constraints.push(Constraint::TypeEqual(exp_type, inferred_type));
+            (ast, expected_type) => {
+                let (mut constraints, inferred_type) = self.infer_expr(env, ast);
+                constraints.push(Constraint::TypeEqual(expected_type, inferred_type));
 
-                (typed_ast, constraints)
+                constraints
             }
         }
     }
 
     fn normalize_type(&mut self, unnorm: Type) -> Type {
         match unnorm {
-            Type::Var(_) | Type::Int | Type::Unit => unnorm,
+            Type::Var(_) | Type::Const(_) => unnorm,
 
             Type::UniVar(uvar) => match self.unification_table.probe_value(uvar) {
                 Some(bound_type) => self.normalize_type(bound_type),
                 None => unnorm,
-            },
+            }
 
             Type::Fun(unnorm_param_type, unnorm_ret_type) => {
                 let param_type = self.normalize_type(*unnorm_param_type);
@@ -112,14 +113,6 @@ impl TypeInference {
         }
     }
 
-    // It is important to note the distinction made between type variables and
-    // unification variables. A type variable is rigid, they are universally
-    // quantified, and they should not be present anywhere during unification. They
-    // are only introduced through type annotations as of now. When generalized
-    // types (type schemes) are instantiated, any occurence of a type variable will
-    // be replaced by fresh unification variables. A unification variable is
-    // flexible, they are placeholders for a rigid, concrete type. This could be a
-    // type constant, function type, or a type variable as well.
     fn unify(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), TypeError> {
         let left = self.normalize_type(unnorm_left);
         let right = self.normalize_type(unnorm_right);
@@ -128,12 +121,12 @@ impl TypeInference {
             (Type::Var(var_a), Type::Var(var_b)) => (var_a == var_b)
                 .then_some(())
                 .ok_or_else(|| TypeError::Mismatch(Type::Var(var_a), Type::Var(var_b))),
+            
+            (Type::Const(name_a), Type::Const(name_b)) if name_a == name_b => Ok(()),
 
-            (Type::Int, Type::Int) | (Type::Unit, Type::Unit) => Ok(()),
-
-            (Type::Fun(a_param, a_ret), Type::Fun(b_param, b_ret)) => {
-                self.unify(*a_param, *b_param)?;
-                self.unify(*a_ret, *b_ret)
+            (Type::Fun(param_a, ret_a), Type::Fun(param_b, ret_b)) => {
+                self.unify(*param_a, *param_b)?;
+                self.unify(*ret_a, *ret_b)
             }
 
             (Type::UniVar(uvar_a), Type::UniVar(uvar_b)) => self

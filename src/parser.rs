@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::{
-    ast::{Expr, Module, Var},
+    ast::{Expr, Item, Module},
     lexer::Token,
 };
 use logos::{Lexer, Logos, Span};
@@ -10,7 +10,7 @@ use logos::{Lexer, Logos, Span};
 pub enum ParseError {
     ReachedEnd,
     UnexpectedToken(Span),
-    TokenMismatch(Token, Token, Span)
+    TokenMismatch(Token, Token, Span),
 }
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -36,17 +36,26 @@ impl Parser {
 
     // Advance token stream
     fn next(&mut self) -> ParseResult<Token> {
-        self.tokens.pop_front().map(|t| t.0).ok_or(ParseError::ReachedEnd)
+        self.tokens
+            .pop_front()
+            .map(|t| t.0)
+            .ok_or(ParseError::ReachedEnd)
     }
 
     // Peek current token
     fn peek(&mut self) -> ParseResult<&Token> {
-        self.tokens.front().map(|t| &t.0).ok_or(ParseError::ReachedEnd)
+        self.tokens
+            .front()
+            .map(|t| &t.0)
+            .ok_or(ParseError::ReachedEnd)
     }
 
     // Span of current token
     fn span(&mut self) -> ParseResult<Span> {
-        self.tokens.front().map(|t| t.1.clone()).ok_or(ParseError::ReachedEnd)
+        self.tokens
+            .front()
+            .map(|t| t.1.clone())
+            .ok_or(ParseError::ReachedEnd)
     }
 
     // Consume specific token variant
@@ -55,16 +64,20 @@ impl Parser {
         if std::mem::discriminant(current) == std::mem::discriminant(&expected) {
             Ok(self.next()?)
         } else {
-            Err(ParseError::TokenMismatch(current.clone(), expected, self.span()?))
+            Err(ParseError::TokenMismatch(
+                current.clone(),
+                expected,
+                self.span()?,
+            ))
         }
     }
 
-    pub fn parse(&mut self) -> ParseResult<Module<Var>> {
-        let next = self.next()?;
-        println!("{:#?}", next);
-        for (token, span) in self.tokens.clone().into_iter() {
-            println!("{:#?}", token);
-        }
-        Ok(Module { items: Vec::new() })
+    // Parse and desugar top-level fn definition
+    fn parse_function(&mut self) -> ParseResult<Item> {
+        todo!()
+    }
+
+    pub fn parse(&mut self) -> ParseResult<Module> {
+        todo!()
     }
 }

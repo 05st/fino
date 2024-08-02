@@ -1,28 +1,54 @@
 use crate::types::Type;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Var(pub u32);
+#[derive(Debug)]
+pub struct NodeId(usize);
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct DefId(usize);
 
 #[derive(Debug)]
-pub struct TypedVar(pub Var, pub Type);
+pub enum Lit {
+    Int(u64),
+    Float(f64),
+    String(String),
+    Char(char),
+    Bool(bool),
+    Unit,
+}
 
 #[derive(Debug)]
-pub enum Expr<V> {
-    Var(V),
-    Int(i64),
-    Lam(V, Box<Self>),
-    App(Box<Self>, Box<Self>),
+pub enum Expr {
+    Lit {
+        id: NodeId,
+        literal: Lit,
+    },
+    Var {
+        id: NodeId,
+        def_id: DefId,
+        name: String,
+    },
+    App {
+        id: NodeId,
+        fun: Box<Expr>,
+        arg: Box<Expr>,
+    },
+    Lam {
+        id: NodeId,
+        param: String,
+        param_def_id: DefId,
+        body: Box<Expr>,
+    },
 }
 
 // An item is a top-level let-definition. Functions are desugared into curried
 // lambda expressions by the parser.
 #[derive(Debug)]
-pub struct Item<V> {
+pub struct Item {
     name: String,
     type_ann: Type,
-    expr: Expr<V>,
+    expr: Expr,
 }
 
-pub struct Module<V> {
-    pub items: Vec<Item<V>>,
+pub struct Module {
+    pub items: Vec<Item>,
 }
