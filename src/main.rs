@@ -2,6 +2,7 @@ use clap::Parser as _;
 use parser::Parser;
 
 mod ast;
+mod error;
 mod inference;
 mod lexer;
 mod parser;
@@ -25,8 +26,13 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let input = std::fs::read_to_string(args.src).unwrap();
-    let mut parser = Parser::new(&input).unwrap();
-    parser.parse();
+    let mut parser = Parser::new();
+    match parser.parse(&input) {
+        Ok(res) => println!("{:?}", res),
+        Err(err) => {
+            todo!()
+        }
+    }
 
     /*
     let mut inf = TypeInference {

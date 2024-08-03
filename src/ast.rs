@@ -1,4 +1,20 @@
+use logos::Span;
+
 use crate::types::Type;
+
+pub struct NodeSource {
+    span: Span,
+    file_path: String,
+}
+
+impl NodeSource {
+    pub fn new(span: Span, file_path: String) -> Self {
+        Self {
+            span,
+            file_path,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct NodeId(usize);
@@ -49,6 +65,7 @@ pub struct Item {
     expr: Expr,
 }
 
+#[derive(Debug)]
 pub struct Module {
     pub items: Vec<Item>,
 }
