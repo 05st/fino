@@ -3,17 +3,8 @@ use logos::Span;
 use crate::types::Type;
 
 pub struct NodeSource {
-    span: Span,
-    file_path: String,
-}
-
-impl NodeSource {
-    pub fn new(span: Span, file_path: String) -> Self {
-        Self {
-            span,
-            file_path,
-        }
-    }
+    pub span: Span,
+    pub file_path: String,
 }
 
 #[derive(Debug)]

@@ -38,7 +38,7 @@ impl Parser {
     // Maybe use a macro instead?
     // self.error(...)?; or return self.error(); looks weird
     fn error<T>(&self, error: ParseError, span: Span) -> ParseResult<T> {
-        Err(CompilerError::with_source(error, NodeSource::new(span, self.file_path.clone())))
+        Err(CompilerError::new(error, Some(span), self.file_path.clone()))
     }
 
     // Advance token stream and return popped token
@@ -46,14 +46,14 @@ impl Parser {
         self.tokens
             .pop_front()
             .map(|t| t.0)
-            .ok_or(CompilerError::from(ParseError::ReachedEnd))
+            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
     }
 
     // Advance token stream and return popped (token, span)
     fn next_with_span(&mut self) -> ParseResult<(Token, Span)> {
         self.tokens
             .pop_front()
-            .ok_or(CompilerError::from(ParseError::ReachedEnd))
+            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
     }
 
     // Peek current token
@@ -61,7 +61,7 @@ impl Parser {
         self.tokens
             .front()
             .map(|t| &t.0)
-            .ok_or(CompilerError::from(ParseError::ReachedEnd))
+            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
     }
 
     // Span of current token
@@ -69,7 +69,7 @@ impl Parser {
         self.tokens
             .front()
             .map(|t| t.1.clone())
-            .ok_or(CompilerError::from(ParseError::ReachedEnd))
+            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
     }
 
     // Consume specific token variant
@@ -122,7 +122,6 @@ impl Parser {
         self.expect(Token::Dedent)?;
 
         // Desugar function into definition with curried lambdas
-
         todo!()
     }
 
