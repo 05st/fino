@@ -1,7 +1,7 @@
 use ena::unify::{EqUnifyValue, UnifyKey};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
-pub struct TypeVar(u32);
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd)]
+pub struct TypeVar(pub String);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
 pub struct TypeUniVar(u32);
@@ -40,7 +40,21 @@ impl UnifyKey for TypeUniVar {
     }
 }
 
+// Macro for generating base type constructors
+macro_rules! base_types {
+    ( $( $t:ident ),+ ) => {
+        $(
+            pub fn $t() -> Type {
+                Type::Const(String::from(stringify!($t)))
+            }
+        )+
+    };
+}
+
 impl Type {
+    // Insert base type constructors
+    base_types!(unit, bool, char, str, i32, i64, u32, u64, f32, f64);
+
     pub fn occurs_check(&self, uvar: TypeUniVar) -> Result<(), Type> {
         match self {
             Type::Var(_) | Type::Const(_) => Ok(()),

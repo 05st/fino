@@ -66,6 +66,8 @@ pub enum Token {
     #[token("false", |_| false)]
     LitBool(bool),
 
+    #[token("()")]
+    ClosedParens,    
     #[token("(")]
     LeftParen,
     #[token(")")]

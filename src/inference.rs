@@ -34,12 +34,12 @@ impl TypeInference {
                 (
                     Vec::new(),
                     match literal {
-                        Lit::Int(_) => Type::Const(String::from("i32")),
-                        Lit::Float(_) => Type::Const(String::from("f32")),
-                        Lit::String(_) => Type::Const(String::from("str")),
-                        Lit::Char(_) => Type::Const(String::from("char")),
-                        Lit::Bool(_) => Type::Const(String::from("bool")),
-                        Lit::Unit => Type::Const(String::from("unit")),
+                        Lit::Int(_) => Type::i32(),
+                        Lit::Float(_) => Type::f32(),
+                        Lit::String(_) => Type::str(),
+                        Lit::Char(_) => Type::char(),
+                        Lit::Bool(_) => Type::bool(),
+                        Lit::Unit => Type::unit(),
                     }
                 )
             }
@@ -73,8 +73,27 @@ impl TypeInference {
 
                 let fun_constraints = self.check_expr(env, *fun, fun_type);
                 (
-                    arg_constraints.into_iter().chain(fun_constraints).collect(),
+                    arg_constraints
+                        .into_iter()
+                        .chain(fun_constraints)
+                        .collect(),
                     ret_type,
+                )
+            }
+
+            Expr::If { id, cond, texpr, fexpr } => {
+                let cond_constraints = self.check_expr(env.clone(), *cond, Type::bool());
+
+                let (texpr_constraints, branch_type) = self.infer_expr(env.clone(), *texpr);
+                let fexpr_constraints = self.check_expr(env, *fexpr, branch_type.clone());
+
+                (
+                    cond_constraints
+                        .into_iter()
+                        .chain(texpr_constraints)
+                        .chain(fexpr_constraints)
+                        .collect(),
+                    branch_type,
                 )
             }
         }
@@ -82,6 +101,13 @@ impl TypeInference {
 
     fn check_expr(&mut self, env: TypeEnv, expr: Expr, expected_type: Type) -> Vec<Constraint> {
         match (expr, expected_type) {
+            (Expr::Lit { id, literal: Lit::Int(_) }, t) if t == Type::i32() => Vec::new(),
+            (Expr::Lit { id, literal: Lit::Float(_) }, t) if t == Type::f32() => Vec::new(),
+            (Expr::Lit { id, literal: Lit::String(_) }, t) if t == Type::str() => Vec::new(),
+            (Expr::Lit { id, literal: Lit::Char(_) }, t) if t == Type::char() => Vec::new(),
+            (Expr::Lit { id, literal: Lit::Bool(_) }, t) if t == Type::bool() => Vec::new(),
+            (Expr::Lit { id, literal: Lit::Unit }, t) if t == Type::unit() => Vec::new(),
+
             (Expr::Lam { id, param, param_def_id, body }, Type::Fun(param_type, ret_type)) => {
                 let new_env = env.update(param_def_id, *param_type);
                 self.check_expr(new_env, *body, *ret_type)

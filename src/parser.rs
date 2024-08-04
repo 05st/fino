@@ -1,10 +1,10 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{Expr, Item, Module, NodeId, NodeSource},
+    ast::{DefId, Expr, Item, Lit, Module, NodeId, NodeSource},
     error::CompilerError,
     lexer::{LexerError, Token},
-    types::Type
+    types::{Type, TypeVar}
 };
 use logos::{Logos, Span};
 
@@ -20,7 +20,7 @@ type ParseResult<T> = Result<T, CompilerError<ParseError>>;
 
 pub struct Parser {
     source_map: HashMap<NodeId, NodeSource>,
-    node_id: usize,
+    node_id_count: usize,
     tokens: VecDeque<(Token, Span)>,
     file_path: String,
 }
@@ -29,10 +29,21 @@ impl Parser {
     pub fn new() -> Self {
         Self {
             source_map: HashMap::new(),
-            node_id: 0,
+            node_id_count: 0,
             tokens: VecDeque::new(),
             file_path: String::new()
         }
+    }
+
+    fn register_source(&mut self, span: Span) -> NodeId {
+        let node_id = NodeId(self.node_id_count);
+
+        self.source_map.insert(node_id.clone(), NodeSource {
+            span,
+            file_path: self.file_path.clone(),
+        });
+
+        node_id
     }
 
     // Maybe use a macro instead?
@@ -46,14 +57,14 @@ impl Parser {
         self.tokens
             .pop_front()
             .map(|t| t.0)
-            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
+            .ok_or(CompilerError::new(ParseError::ReachedEnd, None, self.file_path.clone()))
     }
 
     // Advance token stream and return popped (token, span)
     fn next_with_span(&mut self) -> ParseResult<(Token, Span)> {
         self.tokens
             .pop_front()
-            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
+            .ok_or(CompilerError::new(ParseError::ReachedEnd, None, self.file_path.clone()))
     }
 
     // Peek current token
@@ -61,7 +72,7 @@ impl Parser {
         self.tokens
             .front()
             .map(|t| &t.0)
-            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
+            .ok_or(CompilerError::new(ParseError::ReachedEnd, None, self.file_path.clone()))
     }
 
     // Span of current token
@@ -69,7 +80,7 @@ impl Parser {
         self.tokens
             .front()
             .map(|t| t.1.clone())
-            .ok_or(CompilerError::primitive(ParseError::ReachedEnd, self.file_path.clone()))
+            .ok_or(CompilerError::new(ParseError::ReachedEnd, None, self.file_path.clone()))
     }
 
     // Consume specific token variant
@@ -83,12 +94,106 @@ impl Parser {
         }
     }
 
-    fn parse_expr(&mut self) -> ParseResult<Expr> {
-        todo!()
+    // Parse type constant or type variable
+    fn parse_base_type(&mut self) -> ParseResult<Type> {
+        let (token, span) = self.next_with_span()?;
+
+        match token {
+            Token::KwUnit => Ok(Type::unit()),
+            Token::KwBool => Ok(Type::bool()),
+            Token::KwChar => Ok(Type::char()),
+            Token::KwStr => Ok(Type::str()),
+            Token::KwI32 => Ok(Type::i32()),
+            Token::KwI64 => Ok(Type::i64()),
+            Token::KwU32 => Ok(Type::u32()),
+            Token::KwU64 => Ok(Type::u64()),
+            Token::KwF32 => Ok(Type::f32()),
+            Token::KwF64 => Ok(Type::f64()),
+
+            Token::Identifier(ident) => {
+                if ident.chars().next().unwrap().is_uppercase() {
+                    Ok(Type::Const(ident))
+                } else {
+                    Ok(Type::Var(TypeVar(ident)))
+                }
+            }
+
+            _ => self.error(ParseError::TokenMismatch(String::from("type constant or type variable")), span),
+        }
     }
 
-    fn parse_type_ann(&mut self) -> ParseResult<Type> {
-        todo!()
+    // Parse type
+    fn parse_type(&mut self) -> ParseResult<Type> {
+        let base_type = self.parse_base_type()?;
+
+        match self.peek()? {
+            Token::SmallArrow => {
+                self.next()?;
+                Ok(Type::Fun(Box::new(base_type), Box::new(self.parse_type()?)))
+            }
+            _ => Ok(base_type),
+        }
+    }
+
+    fn parse_if_expr(&mut self) -> ParseResult<Expr> {
+        let if_span = self.span()?;
+        self.expect(Token::KwIf)?;
+        let cond = self.parse_expr()?;
+
+        self.expect(Token::KwThen)?;
+        let texpr = self.parse_expr()?;
+
+        self.expect(Token::KwElse)?;
+        let fexpr = self.parse_expr()?;
+
+        Ok(Expr::If {
+            id: self.register_source(if_span),
+            cond: Box::new(cond),
+            texpr: Box::new(texpr),
+            fexpr: Box::new(fexpr),
+        })
+    }
+
+    fn parse_atom(&mut self) -> ParseResult<Expr> {
+        let (token, span) = self.next_with_span()?;
+        match token {
+            Token::LeftParen => {
+                let expr = self.parse_expr()?;
+                self.expect(Token::RightParen)?;
+                Ok(expr)
+            },
+            Token::Identifier(ident) => Ok(Expr::Var {
+                id: self.register_source(span),
+                def_id: DefId(0),
+                name: ident
+            }),
+            Token::LitBool(b) => Ok(Expr::Lit {
+                id: self.register_source(span),
+                literal: Lit::Bool(b),
+            }),
+            Token::LitDecimal(n) => Ok(Expr::Lit {
+                id: self.register_source(span),
+                literal: Lit::Int(n),
+            }),
+            Token::LitString(s) => Ok(Expr::Lit {
+                id: self.register_source(span),
+                literal: Lit::String(s),
+            }),
+            Token::ClosedParens => Ok(Expr::Lit {
+                id: self.register_source(span),
+                literal: Lit::Unit,
+            }),
+            // TODO parse char and float literals
+            _ => self.error(ParseError::TokenMismatch(String::from("identifier, literal, or (")), span),
+        }
+    }
+
+    // Parse expression
+    fn parse_expr(&mut self) -> ParseResult<Expr> {
+        match self.peek()? {
+            Token::KwIf => self.parse_if_expr(),
+            _ => self.parse_atom(),
+        }
     }
 
     // Parse and desugar top-level fn definition
@@ -101,7 +206,8 @@ impl Parser {
         };
 
         self.expect(Token::Colon)?;
-        let type_ann = self.parse_type_ann()?;
+
+        let type_ann = self.parse_type()?;
 
         self.expect(Token::Indent)?;
 
@@ -122,7 +228,20 @@ impl Parser {
         self.expect(Token::Dedent)?;
 
         // Desugar function into definition with curried lambdas
-        todo!()
+        let lambda = params.into_iter().fold(body, |child, (param_name, span)| {
+            Expr::Lam {
+                id: self.register_source(span),
+                param: param_name,
+                param_def_id: DefId(0),
+                body: Box::new(child),
+            }
+        });
+
+        Ok(Item {
+            name: fn_name,
+            type_ann,
+            expr: lambda,
+        })
     }
 
     pub fn parse(&mut self, input: &String) -> ParseResult<Module> {
