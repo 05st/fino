@@ -13,6 +13,15 @@ pub struct NodeId(pub usize);
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct DefId(pub usize);
 
+// A qualified name contains the entire path to the name. For example,
+// 'abc::xyz::func' is a qualified name. An unqualified name would just be
+// 'func'.
+#[derive(Debug)]
+pub enum Name {
+    Unqualified(String),
+    Qualified(Vec<String>),
+}
+
 #[derive(Debug)]
 pub enum Lit {
     Int(u64),
@@ -26,31 +35,31 @@ pub enum Lit {
 #[derive(Debug)]
 pub enum Expr {
     Lit {
-        id: NodeId,
+        node_id: NodeId,
         literal: Lit,
     },
     Var {
-        id: NodeId,
+        node_id: NodeId,
         def_id: DefId,
-        name: String,
+        name: Name,
     },
     App {
-        id: NodeId,
+        node_id: NodeId,
         fun: Box<Expr>,
         arg: Box<Expr>,
     },
     Lam {
-        id: NodeId,
-        param: String,
+        node_id: NodeId,
         param_def_id: DefId,
+        param: String,
         body: Box<Expr>,
     },
     If {
-        id: NodeId,
+        node_id: NodeId,
         cond: Box<Expr>,
         texpr: Box<Expr>,
         fexpr: Box<Expr>,
-    }
+    },
 }
 
 // An item is a top-level let-definition. Functions are desugared into curried
@@ -63,6 +72,28 @@ pub struct Item {
 }
 
 #[derive(Debug)]
+pub struct Import {
+    pub node_id: NodeId,
+    // Fully qualified name of module
+    pub module_name: Vec<String>,
+}
+
+#[derive(Debug)]
+pub enum Export {
+    Item {
+        node_id: NodeId,
+        def_id: DefId,
+        name: String,
+    },
+    Module {
+        node_id: NodeId,
+        module_name: Vec<String>,
+    },
+}
+
+#[derive(Debug)]
 pub struct Module {
     pub items: Vec<Item>,
+    pub imports: Vec<Import>,
+    pub exports: Vec<Export>,
 }

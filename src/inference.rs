@@ -37,7 +37,7 @@ impl TypeInference {
 
     fn infer_expr(&mut self, env: TypeEnv, expr: Expr) -> (Vec<Constraint>, Type) {
         match expr {
-            Expr::Lit { id, literal } => {
+            Expr::Lit { node_id, literal } => {
                 (
                     Vec::new(),
                     match literal {
@@ -51,7 +51,7 @@ impl TypeInference {
                 )
             }
 
-            Expr::Var { id, def_id, name } => {
+            Expr::Var { node_id, def_id, name } => {
                 // Variable is guaranteed to be defined after name resolution
                 let var_type = &env[&def_id];
 
@@ -61,7 +61,7 @@ impl TypeInference {
                 )
             }
 
-            Expr::Lam { id, param, param_def_id, body } => {
+            Expr::Lam { node_id, param_def_id, param, body } => {
                 let param_uvar = self.fresh_uni_var();
                 let new_env = env.update(param_def_id, Type::UniVar(param_uvar));
 
@@ -72,7 +72,7 @@ impl TypeInference {
                 )
             }
 
-            Expr::App { id, fun, arg } => {
+            Expr::App { node_id, fun, arg } => {
                 let (arg_constraints, arg_type) = self.infer_expr(env.clone(), *arg);
 
                 let ret_type = Type::UniVar(self.fresh_uni_var());
@@ -88,7 +88,7 @@ impl TypeInference {
                 )
             }
 
-            Expr::If { id, cond, texpr, fexpr } => {
+            Expr::If { node_id, cond, texpr, fexpr } => {
                 let cond_constraints = self.check_expr(env.clone(), *cond, Type::bool());
 
                 let (texpr_constraints, branch_type) = self.infer_expr(env.clone(), *texpr);
@@ -108,19 +108,19 @@ impl TypeInference {
 
     fn check_expr(&mut self, env: TypeEnv, expr: Expr, expected_type: Type) -> Vec<Constraint> {
         match (expr, expected_type) {
-            (Expr::Lit { id, literal: Lit::Int(_) }, t) if t == Type::i32() => Vec::new(),
-            (Expr::Lit { id, literal: Lit::Float(_) }, t) if t == Type::f32() => Vec::new(),
-            (Expr::Lit { id, literal: Lit::String(_) }, t) if t == Type::str() => Vec::new(),
-            (Expr::Lit { id, literal: Lit::Char(_) }, t) if t == Type::char() => Vec::new(),
-            (Expr::Lit { id, literal: Lit::Bool(_) }, t) if t == Type::bool() => Vec::new(),
-            (Expr::Lit { id, literal: Lit::Unit }, t) if t == Type::unit() => Vec::new(),
+            (Expr::Lit { node_id, literal: Lit::Int(_) }, t) if t == Type::i32() => Vec::new(),
+            (Expr::Lit { node_id, literal: Lit::Float(_) }, t) if t == Type::f32() => Vec::new(),
+            (Expr::Lit { node_id, literal: Lit::String(_) }, t) if t == Type::str() => Vec::new(),
+            (Expr::Lit { node_id, literal: Lit::Char(_) }, t) if t == Type::char() => Vec::new(),
+            (Expr::Lit { node_id, literal: Lit::Bool(_) }, t) if t == Type::bool() => Vec::new(),
+            (Expr::Lit { node_id, literal: Lit::Unit }, t) if t == Type::unit() => Vec::new(),
 
-            (Expr::Lam { id, param, param_def_id, body }, Type::Fun(param_type, ret_type)) => {
+            (Expr::Lam { node_id, param_def_id, param, body }, Type::Fun(param_type, ret_type)) => {
                 let new_env = env.update(param_def_id, *param_type);
                 self.check_expr(new_env, *body, *ret_type)
             }
 
-            (Expr::If { id, cond, texpr, fexpr }, branch_type) => {
+            (Expr::If { node_id, cond, texpr, fexpr }, branch_type) => {
                 let cond_constraints = self.check_expr(env.clone(), *cond, Type::bool());
                 let texpr_constraints = self.check_expr(env.clone(), *texpr, branch_type.clone());
                 let fexpr_constraints = self.check_expr(env, *fexpr, branch_type);

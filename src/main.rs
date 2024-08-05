@@ -5,6 +5,7 @@ mod ast;
 mod error;
 mod inference;
 mod lexer;
+mod modulesort;
 mod parser;
 mod resolution;
 mod types;

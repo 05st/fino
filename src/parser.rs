@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{DefId, Expr, Item, Lit, Module, NodeId, NodeSource},
+    ast::*,
     error::CompilerError,
     lexer::{LexerError, Token},
     types::{Type, TypeVar}
@@ -37,7 +37,7 @@ impl Parser {
         }
     }
 
-    // Create node id -> source mapping and insert to source map
+    // Create node id to source position mapping and insert in source_map
     fn register_source(&mut self, span: Span) -> NodeId {
         let node_id = NodeId(self.node_id_count);
 
@@ -60,7 +60,7 @@ impl Parser {
     // Puts previous token into token stream. Can only be called once before another
     // token needs to be consumed since we only store the previous token, not a
     // history of previous tokens. A bit of a hacky solution to parsing function
-    // applications.
+    // applications and qualified variable names.
     fn backtrack(&mut self) {
         // We assume backtrack() is only called when self.previous is Some(expr),
         // otherwise .unwrap() will panic
@@ -109,6 +109,53 @@ impl Parser {
         } else {
             self.error(ParseError::TokenMismatch(format!("{:?}", expected)), span)
         }
+    }
+
+    // TODO:
+    // Probably add an optional (or mandatory) message string parameter to expect()
+    // instead of using this function.
+    fn expect_identifier(&mut self) -> ParseResult<String> {
+        match self.next_with_span()? {
+            (Token::Identifier(ident), _) => Ok(ident),
+            (_, span) => self.error(ParseError::TokenMismatch(String::from("identifier")), span),
+        }
+    }
+
+    // Skip newlines while ignoring ReachedEnd error from self.peek()
+    fn skip_newlines(&mut self) {
+        while let Ok(Token::Newline) = self.peek() {
+            self.next();
+        }
+    }
+
+    fn parse_name(&mut self) -> ParseResult<Name> {
+        let mut result = Vec::new();
+        loop {
+            result.push(self.expect_identifier()?);
+
+            if let Token::ColonColon = self.peek()? {
+                self.next()?;
+            } else {
+                break;
+            }
+        }
+
+        if result.len() == 1 {
+            // We should have parsed at least one identifier
+            Ok(Name::Unqualified(result.first().unwrap().to_owned()))
+        } else {
+            Ok(Name::Qualified(result))
+        }
+    }
+
+    fn parse_module_name(&mut self) -> ParseResult<Vec<String>> {
+        // Use parse_name() to help parse module name
+        // TODO:
+        // Maybe it should be the other way around?
+        Ok(match self.parse_name()? {
+            Name::Unqualified(ident) => vec![ident],
+            Name::Qualified(qual) => qual
+        })
     }
 
     // Parse type constant or type variable
@@ -164,7 +211,7 @@ impl Parser {
         let fexpr = self.parse_expr()?;
 
         Ok(Expr::If {
-            id: self.register_source(if_span),
+            node_id: self.register_source(if_span),
             cond: Box::new(cond),
             texpr: Box::new(texpr),
             fexpr: Box::new(fexpr),
@@ -181,39 +228,51 @@ impl Parser {
                 Ok(expr)
             },
 
-            Token::Identifier(ident) => Ok(Expr::Var {
-                id: self.register_source(span),
-                def_id: DefId(0),
-                name: ident
-            }),
+            Token::Identifier(ident) => {
+                // Parse qualified name if we see '::' token
+                let name = if let Token::ColonColon = self.peek()? {
+                    // Restore identifier token for parse_name()
+                    self.backtrack();
+
+                    self.parse_name()?
+                } else {
+                    Name::Unqualified(ident)
+                };
+
+                Ok(Expr::Var {
+                    node_id: self.register_source(span),
+                    def_id: DefId(0),
+                    name: name
+                })
+            },
 
             Token::LitBool(b) => Ok(Expr::Lit {
-                id: self.register_source(span),
+                node_id: self.register_source(span),
                 literal: Lit::Bool(b),
             }),
 
             Token::LitDecimal(n) => Ok(Expr::Lit {
-                id: self.register_source(span),
+                node_id: self.register_source(span),
                 literal: Lit::Int(n),
             }),
 
             Token::LitFloat(x) => Ok(Expr::Lit {
-                id: self.register_source(span),
+                node_id: self.register_source(span),
                 literal: Lit::Float(x),
             }),
 
             Token::LitString(s) => Ok(Expr::Lit {
-                id: self.register_source(span),
+                node_id: self.register_source(span),
                 literal: Lit::String(s),
             }),
 
             Token::LitChar(c) => Ok(Expr::Lit {
-                id: self.register_source(span),
+                node_id: self.register_source(span),
                 literal: Lit::Char(c),
             }),
 
             Token::ClosedParens => Ok(Expr::Lit {
-                id: self.register_source(span),
+                node_id: self.register_source(span),
                 literal: Lit::Unit,
             }),
 
@@ -230,7 +289,7 @@ impl Parser {
         let mut arg_span = self.span()?;
         while let Ok(arg_expr) = self.parse_atom() {
             result = Expr::App {
-                id: self.register_source(arg_span),
+                node_id: self.register_source(arg_span),
                 fun: Box::new(result),
                 arg: Box::new(arg_expr),
             };
@@ -250,20 +309,18 @@ impl Parser {
         }
     }
 
-    // Parse and desugar top-level fn definition
-    fn parse_function(&mut self) -> ParseResult<Item> {
+    // Parse and desugar top-level function definition
+    fn parse_fn_item(&mut self) -> ParseResult<Item> {
         self.expect(Token::KwFn)?;
-
-        let fn_name = match self.next_with_span()? {
-            (Token::Identifier(ident), _) => ident,
-            (_, span) => return self.error(ParseError::TokenMismatch(String::from("identifier")), span),
-        };
+        let fn_name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
-
         let type_ann = self.parse_type()?;
 
         self.expect(Token::Indent)?;
+
+        // TODO:
+        // Parse and desugar multiple pattern matching branches
 
         let mut params = Vec::new();
         loop {
@@ -276,17 +333,17 @@ impl Parser {
         }
 
         let body = self.parse_expr()?;
-
-        // TODO:
-        // Parse and desugar multiple pattern matching branches
         self.expect(Token::Dedent)?;
+        
+        // Reverse for proper fold direction
+        params.reverse();
 
         // Desugar function into definition with curried lambdas
         let lambda = params.into_iter().fold(body, |child, (param_name, span)| {
             Expr::Lam {
-                id: self.register_source(span),
-                param: param_name,
+                node_id: self.register_source(span),
                 param_def_id: DefId(0),
+                param: param_name,
                 body: Box::new(child),
             }
         });
@@ -296,6 +353,63 @@ impl Parser {
             type_ann,
             expr: lambda,
         })
+    }
+
+    fn parse_let_item(&mut self) -> ParseResult<Item> {
+        self.expect(Token::KwLet)?;
+        let name = self.expect_identifier()?;
+
+        self.expect(Token::Colon)?;
+        let type_ann = self.parse_type()?;
+
+        self.expect(Token::Equal)?;
+        let expr = self.parse_expr()?;
+        
+        self.expect(Token::Newline)?;
+
+        Ok(Item {
+            name,
+            type_ann,
+            expr,
+        })
+    }
+
+    fn parse_import(&mut self) -> ParseResult<Import> {
+        let span = self.span()?;
+        self.expect(Token::KwImport)?;
+
+        // Use parse_name() to help parse the module name
+        let module_name = self.parse_module_name()?;
+        self.expect(Token::Newline)?;
+
+        Ok(Import {
+            node_id: self.register_source(span),
+            module_name,
+        })
+    }
+
+    fn parse_export(&mut self) -> ParseResult<Export> {
+        let span = self.span()?;
+        self.expect(Token::KwExport)?;
+
+        let export = if let Token::KwModule = self.peek()? {
+            self.next()?;
+            
+            Export::Module {
+                node_id: self.register_source(span),
+                module_name: self.parse_module_name()?,
+            }
+        } else {
+            Export::Item {
+                node_id: self.register_source(span),
+                def_id: DefId(0),
+                name: self.expect_identifier()?,
+            }
+        };
+
+        self.expect(Token::Newline)?;
+
+        Ok(export)
     }
 
     pub fn parse(&mut self, input: &String) -> ParseResult<Module> {
@@ -320,9 +434,33 @@ impl Parser {
         }
 
         // Parse input
-        let items = vec![self.parse_function()?];
+        let mut imports = Vec::new();
+        let mut exports = Vec::new();
+        let mut items = Vec::new();
+
+        loop {
+            self.skip_newlines();
+
+            if !self.tokens.is_empty() {
+                match self.peek()? {
+                    Token::KwImport => imports.push(self.parse_import()?),
+                    Token::KwExport => exports.push(self.parse_export()?),
+                    Token::KwFn => items.push(self.parse_fn_item()?),
+                    Token::KwLet => items.push(self.parse_let_item()?),
+                    _ => {
+                        let span = self.span()?;
+                        return self.error(ParseError::TokenMismatch(String::from("import, export, or top-level definition")), span);
+                    },
+                }
+            } else {
+                break;
+            }
+        }
+
         Ok(Module {
             items,
+            imports,
+            exports,
         })
     }
 }

@@ -101,7 +101,7 @@ pub enum Token {
     #[token(":")]
     Colon,
     #[token("::")]
-    DoubleColon,
+    ColonColon,
 
     #[token("\\")]
     Backslash,
