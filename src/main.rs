@@ -6,6 +6,7 @@ mod error;
 mod inference;
 mod lexer;
 mod parser;
+mod resolution;
 mod types;
 
 #[derive(clap::Parser, Debug)]

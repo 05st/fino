@@ -13,7 +13,7 @@ enum Constraint {
 }
 
 struct TypeInference {
-    pub unification_table: InPlaceUnificationTable<TypeUniVar>,
+    unification_table: InPlaceUnificationTable<TypeUniVar>,
     expr_type_map: HashMap<NodeId, Type>,
 }
 
@@ -24,6 +24,13 @@ enum TypeError {
 }
 
 impl TypeInference {
+    pub fn new() -> Self {
+        Self {
+            unification_table: InPlaceUnificationTable::new(),
+            expr_type_map: HashMap::new(),
+        }
+    }
+
     fn fresh_uni_var(&mut self) -> TypeUniVar {
         self.unification_table.new_key(None)
     }

@@ -174,37 +174,49 @@ impl Parser {
     fn parse_atom(&mut self) -> ParseResult<Expr> {
         let (token, span) = self.next_with_span()?;
         match token {
+            // Parse parenthesized expression
             Token::LeftParen => {
                 let expr = self.parse_expr()?;
                 self.expect(Token::RightParen)?;
                 Ok(expr)
             },
+
             Token::Identifier(ident) => Ok(Expr::Var {
                 id: self.register_source(span),
                 def_id: DefId(0),
                 name: ident
             }),
+
             Token::LitBool(b) => Ok(Expr::Lit {
                 id: self.register_source(span),
                 literal: Lit::Bool(b),
             }),
+
             Token::LitDecimal(n) => Ok(Expr::Lit {
                 id: self.register_source(span),
                 literal: Lit::Int(n),
             }),
+
+            Token::LitFloat(x) => Ok(Expr::Lit {
+                id: self.register_source(span),
+                literal: Lit::Float(x),
+            }),
+
             Token::LitString(s) => Ok(Expr::Lit {
                 id: self.register_source(span),
                 literal: Lit::String(s),
             }),
+
             Token::LitChar(c) => Ok(Expr::Lit {
                 id: self.register_source(span),
                 literal: Lit::Char(c),
             }),
+
             Token::ClosedParens => Ok(Expr::Lit {
                 id: self.register_source(span),
                 literal: Lit::Unit,
             }),
-            // TODO parse float literals
+
             _ => self.error(ParseError::TokenMismatch(String::from("identifier, literal, or (")), span),
         }
     }

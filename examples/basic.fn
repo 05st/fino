@@ -1,2 +1,2 @@
 fn factorial : u32 -> u32
-    x = if x then '1' else factorial x y
+    x = if x then '1' else factorial x 420.69
