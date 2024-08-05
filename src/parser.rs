@@ -23,6 +23,7 @@ pub struct Parser {
     node_id_count: usize,
     tokens: VecDeque<(Token, Span)>,
     file_path: String,
+    previous: Option<(Token, Span)>,
 }
 
 impl Parser {
@@ -31,10 +32,12 @@ impl Parser {
             source_map: HashMap::new(),
             node_id_count: 0,
             tokens: VecDeque::new(),
-            file_path: String::new()
+            file_path: String::new(),
+            previous: None,
         }
     }
 
+    // Create node id -> source mapping and insert to source map
     fn register_source(&mut self, span: Span) -> NodeId {
         let node_id = NodeId(self.node_id_count);
 
@@ -42,6 +45,8 @@ impl Parser {
             span,
             file_path: self.file_path.clone(),
         });
+
+        self.node_id_count += 1;
 
         node_id
     }
@@ -52,19 +57,31 @@ impl Parser {
         Err(CompilerError::new(error, Some(span), self.file_path.clone()))
     }
 
-    // Advance token stream and return popped token
-    fn next(&mut self) -> ParseResult<Token> {
-        self.tokens
-            .pop_front()
-            .map(|t| t.0)
-            .ok_or(CompilerError::new(ParseError::ReachedEnd, None, self.file_path.clone()))
+    // Puts previous token into token stream. Can only be called once before another
+    // token needs to be consumed since we only store the previous token, not a
+    // history of previous tokens. A bit of a hacky solution to parsing function
+    // applications.
+    fn backtrack(&mut self) {
+        // We assume backtrack() is only called when self.previous is Some(expr),
+        // otherwise .unwrap() will panic
+        self.tokens.push_front(self.previous.to_owned().unwrap());
+        self.previous = None;
     }
 
     // Advance token stream and return popped (token, span)
     fn next_with_span(&mut self) -> ParseResult<(Token, Span)> {
-        self.tokens
+        let result = self.tokens
             .pop_front()
-            .ok_or(CompilerError::new(ParseError::ReachedEnd, None, self.file_path.clone()))
+            .ok_or(CompilerError::new(ParseError::ReachedEnd, None, self.file_path.clone()))?;
+
+        self.previous = Some(result.clone());
+
+        Ok(result)
+    }
+
+    // Advance token stream and return popped token
+    fn next(&mut self) -> ParseResult<Token> {
+        self.next_with_span().map(|res| res.0)
     }
 
     // Peek current token
@@ -179,20 +196,45 @@ impl Parser {
                 id: self.register_source(span),
                 literal: Lit::String(s),
             }),
+            Token::LitChar(c) => Ok(Expr::Lit {
+                id: self.register_source(span),
+                literal: Lit::Char(c),
+            }),
             Token::ClosedParens => Ok(Expr::Lit {
                 id: self.register_source(span),
                 literal: Lit::Unit,
             }),
-            // TODO parse char and float literals
+            // TODO parse float literals
             _ => self.error(ParseError::TokenMismatch(String::from("identifier, literal, or (")), span),
         }
+    }
+
+    fn parse_fn_app(&mut self) -> ParseResult<Expr> {
+        let mut result = self.parse_atom()?;
+
+        // Need to get span for possible arg expr before parse_atom() is
+        // called because it consumes the token, so we can't get the span
+        // afterwards.
+        let mut arg_span = self.span()?;
+        while let Ok(arg_expr) = self.parse_atom() {
+            result = Expr::App {
+                id: self.register_source(arg_span),
+                fun: Box::new(result),
+                arg: Box::new(arg_expr),
+            };
+            arg_span = self.span()?;
+        }
+        // When parsing atom fails, restore token consumed by parse_atom()
+        self.backtrack();
+
+        Ok(result)
     }
 
     // Parse expression
     fn parse_expr(&mut self) -> ParseResult<Expr> {
         match self.peek()? {
             Token::KwIf => self.parse_if_expr(),
-            _ => self.parse_atom(),
+            _ => self.parse_fn_app(),
         }
     }
 

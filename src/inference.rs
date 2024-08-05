@@ -113,6 +113,18 @@ impl TypeInference {
                 self.check_expr(new_env, *body, *ret_type)
             }
 
+            (Expr::If { id, cond, texpr, fexpr }, branch_type) => {
+                let cond_constraints = self.check_expr(env.clone(), *cond, Type::bool());
+                let texpr_constraints = self.check_expr(env.clone(), *texpr, branch_type.clone());
+                let fexpr_constraints = self.check_expr(env, *fexpr, branch_type);
+
+                cond_constraints
+                    .into_iter()
+                    .chain(texpr_constraints)
+                    .chain(fexpr_constraints)
+                    .collect()
+            }
+
             (ast, expected_type) => {
                 let (mut constraints, inferred_type) = self.infer_expr(env, ast);
                 constraints.push(Constraint::TypeEqual(expected_type, inferred_type));

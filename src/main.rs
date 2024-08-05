@@ -30,7 +30,7 @@ fn main() {
     match parser.parse(&input) {
         Ok(res) => println!("{:?}", res),
         Err(err) => {
-            err.report()
+            err.report();
         }
     }
 

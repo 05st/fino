@@ -65,6 +65,10 @@ pub enum Token {
     #[token("true", |_| true)]
     #[token("false", |_| false)]
     LitBool(bool),
+    // TODO:
+    // Properly parse escape sequences
+    #[regex(r"'.'", |lex| lex.slice().chars().nth(1).to_owned())]
+    LitChar(char),
 
     #[token("()")]
     ClosedParens,    
