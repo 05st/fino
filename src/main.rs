@@ -1,5 +1,9 @@
+use std::{fs::read_to_string, path::{Path, PathBuf}};
+
+use ast::Module;
 use clap::Parser as _;
 use parser::Parser;
+use walkdir::WalkDir;
 
 mod ast;
 mod error;
@@ -10,61 +14,75 @@ mod parser;
 mod resolution;
 mod types;
 
+const FINO_FILE_EXTENSION: &str = ".fn";
+
 #[derive(clap::Parser, Debug)]
 struct Args {
     // Input path
-    #[arg(default_value = "./", help = "Input path")]
+    #[arg(help = "Input path")]
     src: String,
 
     // Output path
     #[arg(short, long, default_value = "a", help = "Output path")]
     out: String,
+}
 
-    // Input is a file rather than dir
-    #[arg(short, long, help = "Input is a file")]
-    file: bool,
+fn get_module_name(root: &Path, file: &Path) -> Vec<String> {
+    if file == root {
+        vec![String::from(file
+            .with_extension("")
+            .file_name()
+            .expect("Failed to get file name")
+            .to_str()
+            .expect("Failed to convert OsStr to str"))]
+    } else {
+        file
+            // Remove .fn extension
+            .with_extension("")
+            .to_path_buf()
+            // Remove path prefix from root
+            .strip_prefix(root)
+            .expect("Failed to strip root path prefix")
+            .components()
+            // Map to collection of strings
+            .map(|c|
+                String::from(c
+                    .as_os_str()
+                    .to_str()
+                    .expect("Failed to convert OsStr to str")))
+            .collect()
+    }
 }
 
 fn main() {
     let args = Args::parse();
-    let input = std::fs::read_to_string(args.src).unwrap();
+    let root_path = Path::new(&args.src);
+
+    let mut program: Vec<Module> = Vec::new();
+
+    let files_iter = WalkDir::new(root_path)
+        .into_iter()
+        .map(|e| match e {
+            Ok(entry) => entry,
+            Err(err) => panic!("{}", err),
+        }).filter(|e| {
+            e.file_name()
+                .to_str()
+                .map(|s| s.ends_with(FINO_FILE_EXTENSION))
+                .unwrap_or(false)
+        });
+    
     let mut parser = Parser::new();
-    match parser.parse(&input) {
-        Ok(res) => println!("{:?}", res),
-        Err(err) => {
-            err.report();
+    for entry in files_iter {
+        let file_path = entry.path();
+        let input = read_to_string(file_path).expect(format!("Failed to read file {:?}", file_path).as_str());
+
+        let parse_result = parser.parse(&input, get_module_name(root_path, file_path));
+        match parse_result {
+            Ok(module) => program.push(module),
+            Err(err) => err.report(),
         }
     }
 
-    /*
-    let mut inf = TypeInference {
-        unification_table: InPlaceUnificationTable::new(),
-    };
-    /*let ast = Ast::App(
-        Box::new(Ast::Lam(
-            Var(0),
-            Box::new(Ast::App(
-                Box::new(Ast::Var(Var(0))),
-                Box::new(Ast::Var(Var(0))))))),
-        Box::new(Ast::Lam(
-            Var(1),
-            Box::new(Ast::Var(Var(1))))));
-    let (ast, constrs, typ) = inf.synth(im::HashMap::new(), ast);*/
-    let tv1 = inf.fresh_uni_var();
-    let tv2 = inf.fresh_uni_var();
-    let tv3 = inf.fresh_uni_var();
-    let res = inf.solve_constraints(vec![
-        Constraint::TypeEqual(
-            Type::UniVar(tv2),
-            Type::Fun(Box::new(Type::Int), Box::new(Type::UniVar(tv3))),
-        ),
-        Constraint::TypeEqual(Type::UniVar(tv1), Type::UniVar(tv2)),
-        Constraint::TypeEqual(
-            Type::UniVar(tv2),
-            Type::Fun(Box::new(Type::Int), Box::new(Type::Int)),
-        ),
-    ]);
-    println!("{:?}", res);
-    println!("{:?}", inf.unification_table);
-    */
+    println!("{:?}", program);
 }

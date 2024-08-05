@@ -87,12 +87,14 @@ pub enum Export {
     },
     Module {
         node_id: NodeId,
+        // Fully qualified name of module
         module_name: Vec<String>,
     },
 }
 
 #[derive(Debug)]
 pub struct Module {
+    pub module_name: Vec<String>,
     pub items: Vec<Item>,
     pub imports: Vec<Import>,
     pub exports: Vec<Export>,

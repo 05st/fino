@@ -412,7 +412,7 @@ impl Parser {
         Ok(export)
     }
 
-    pub fn parse(&mut self, input: &String) -> ParseResult<Module> {
+    pub fn parse(&mut self, input: &String, module_name: Vec<String>) -> ParseResult<Module> {
         // Tokenize input
         let lexer = Token::lexer(input).spanned();
 
@@ -458,6 +458,7 @@ impl Parser {
         }
 
         Ok(Module {
+            module_name,
             items,
             imports,
             exports,
