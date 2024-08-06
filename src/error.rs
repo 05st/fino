@@ -3,6 +3,7 @@ use logos::Span;
 
 use crate::ast::NodeSource;
 
+#[derive(Debug)]
 pub struct CompilerError<E> {
     error: E,
     span: Option<Span>,

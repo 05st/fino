@@ -1,0 +1,3 @@
+import animals::foo::bar
+import animals::dog
+import xyz

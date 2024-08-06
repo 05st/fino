@@ -71,7 +71,7 @@ pub struct Item {
     pub expr: Expr,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Import {
     pub node_id: NodeId,
     // Fully qualified name of module

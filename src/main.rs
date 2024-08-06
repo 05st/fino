@@ -1,7 +1,11 @@
-use std::{fs::read_to_string, path::{Path, PathBuf}};
+use std::{
+    fs::read_to_string,
+    path::Path,
+};
 
 use ast::Module;
 use clap::Parser as _;
+use modulesort::toposort_modules;
 use parser::Parser;
 use walkdir::WalkDir;
 
@@ -30,6 +34,7 @@ struct Args {
 fn get_module_name(root: &Path, file: &Path) -> Vec<String> {
     if file == root {
         vec![String::from(file
+            // Remove .fn extension
             .with_extension("")
             .file_name()
             .expect("Failed to get file name")
@@ -71,7 +76,7 @@ fn main() {
                 .map(|s| s.ends_with(FINO_FILE_EXTENSION))
                 .unwrap_or(false)
         });
-    
+
     let mut parser = Parser::new();
     for entry in files_iter {
         let file_path = entry.path();
@@ -84,5 +89,8 @@ fn main() {
         }
     }
 
-    println!("{:?}", program);
+    match toposort_modules(program) {
+        Ok(sorted_program) => println!("{:?}", sorted_program),
+        Err(sort_err) => println!("{:?}", sort_err),
+    }
 }
