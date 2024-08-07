@@ -2,8 +2,8 @@ use std::fmt::Display;
 use std::fs::read_to_string;
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
-use logos::Span;
 
+use crate::ast::Name;
 use crate::cache::Location;
 use crate::types::Type;
 
@@ -19,7 +19,7 @@ pub enum ErrorKind {
     UnknownModule,
 
     // Name resolution errors
-    UnknownVariable,
+    UnknownVariable(Name),
 
     // Type inference errors
     TypeMismatch(Type, Type),
@@ -70,7 +70,12 @@ impl Display for ErrorKind {
             CircularDependency => write!(f, "Modules have a circular dependency"),
             UnknownModule => write!(f, "Could not find module"),
 
-            UnknownVariable => write!(f, "Unknown variable"),
+            UnknownVariable(name) => {
+                match name {
+                    Name::Qualified(qual) => write!(f, "Unknown variable {}", qual.join("::")),
+                    Name::Unqualified(ident) => write!(f, "Unknown variable {}", ident),
+                }
+            },
 
             TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
             InfiniteType => write!(f, "Attempt to construct infinite type here"),

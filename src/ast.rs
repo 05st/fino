@@ -56,7 +56,8 @@ pub enum Expr {
 }
 
 // An item is a top-level let-definition. Functions are desugared into curried
-// lambda expressions by the parser.
+// lambda expressions by the parser. The fully qualified name of the item is
+// given by module_name ++ name;
 #[derive(Debug)]
 pub struct Item {
     pub name: String,

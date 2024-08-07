@@ -7,6 +7,7 @@ use clap::Parser as _;
 use error::Error;
 use modulesort::toposort_modules;
 use parser::Parser;
+use resolution::NameResolution;
 use walkdir::{DirEntry, WalkDir};
 
 mod ast;
@@ -76,6 +77,9 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
     }
 
     program = toposort_modules(&mut compiler_cache, program)?;
+
+    let mut resolution = NameResolution::new(&mut compiler_cache);
+    resolution.resolve(&mut program)?;
 
     println!("{:?}", program);
 
