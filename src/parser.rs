@@ -419,8 +419,7 @@ impl<'a> Parser<'a> {
         for lex in lexer {
             match lex {
                 (Ok(token), span) => self.tokens.push_back((token, span)),
-                (Err(lexer_error), span) => {
-                    return {
+                (Err(lexer_error), span) => return {
                     // Translate lexer errors
                     match lexer_error {
                         LexerError::ExpectedIndent(expected, got) => self.error(ErrorKind::ExpectedIndent(expected, got), span),
