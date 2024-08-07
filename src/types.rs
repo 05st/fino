@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use ena::unify::{EqUnifyValue, UnifyKey};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd)]
@@ -72,5 +74,11 @@ impl Type {
                 ret.occurs_check(uvar).map_err(|_| self.clone())
             }
         }
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }

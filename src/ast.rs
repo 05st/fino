@@ -1,11 +1,4 @@
-use logos::Span;
-
 use crate::types::Type;
-
-pub struct NodeSource {
-    pub span: Span,
-    pub file_path: String,
-}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);

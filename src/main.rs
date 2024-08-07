@@ -1,15 +1,16 @@
 use std::{
-    fs::read_to_string,
-    path::Path,
+    collections::HashMap, fs::read_to_string, path::Path
 };
 
 use ast::Module;
+use cache::CompilerCache;
 use clap::Parser as _;
 use modulesort::toposort_modules;
 use parser::Parser;
 use walkdir::WalkDir;
 
 mod ast;
+mod cache;
 mod error;
 mod inference;
 mod lexer;
@@ -63,6 +64,10 @@ fn main() {
     let args = Args::parse();
     let root_path = Path::new(&args.src);
 
+    let mut compiler_cache = CompilerCache {
+        location_map: HashMap::new(),
+    };
+
     let mut program: Vec<Module> = Vec::new();
 
     let files_iter = WalkDir::new(root_path)
@@ -77,7 +82,7 @@ fn main() {
                 .unwrap_or(false)
         });
 
-    let mut parser = Parser::new();
+    let mut parser = Parser::new(&mut compiler_cache);
     for entry in files_iter {
         let file_path = entry.path();
         let input = read_to_string(file_path).expect(format!("Failed to read file {:?}", file_path).as_str());
@@ -85,12 +90,12 @@ fn main() {
         let parse_result = parser.parse(&input, get_module_name(root_path, file_path));
         match parse_result {
             Ok(module) => program.push(module),
-            Err(err) => err.report(),
+            Err(err) => todo!(),
         }
     }
 
     match toposort_modules(program) {
         Ok(sorted_program) => println!("{:?}", sorted_program),
-        Err(sort_err) => println!("{:?}", sort_err),
+        Err(sort_err) => todo!(),
     }
 }

@@ -1,8 +1,11 @@
+use std::fmt::Display;
+
 use logos::{skip, FilterResult, Lexer, Logos};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum LexerError {
-    IncorrectIndent(usize, usize),
+    // (expected, got)
+    ExpectedIndent(usize, usize),
     #[default]
     Default
 }
@@ -121,8 +124,10 @@ pub enum Token {
     #[regex(r"[ \t]+", skip)]
     Space,
 
-    #[regex(r"[a-zA-Z]\w*", |lex| lex.slice().to_owned())]
-    Identifier(String),
+    #[regex(r"[A-Z]\w*", |lex| lex.slice().to_owned())]
+    UpperIdentifier(String),
+    #[regex(r"[a-z]\w*", |lex| lex.slice().to_owned())]
+    LowerIdentifier(String),
 }
 
 fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
@@ -135,7 +140,7 @@ fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerErr
             
             let prev_col = lexer.extras.last().copied().unwrap_or(0);
             if new_col != prev_col {
-                FilterResult::Error(LexerError::IncorrectIndent(new_col, prev_col))
+                FilterResult::Error(LexerError::ExpectedIndent(prev_col, new_col))
             } else {
                 FilterResult::Emit(Token::Dedent)
             }
@@ -147,5 +152,11 @@ fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerErr
             lexer.extras.push(new_col);
             FilterResult::Emit(Token::Indent)
         }
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }

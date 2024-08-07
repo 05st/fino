@@ -1,14 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ast::Module, error::CompilerError};
-
-#[derive(Debug)]
-pub enum ModuleSortError {
-    CircularDependency,
-    UndefinedModule,
-}
-
-type SortResult<T> = Result<T, CompilerError<ModuleSortError>>;
+use crate::{ast::Module, error::Error};
 
 enum ModuleState {
     Processing,
@@ -22,13 +14,15 @@ struct ModuleSort {
 }
 
 impl ModuleSort {
-    fn dfs(&mut self, module_name: Vec<String>) -> SortResult<()> {
+    fn dfs(&mut self, module_name: Vec<String>) -> Result<(), Error> {
+        use ModuleState::*;
+
         match self.module_state_map.get(&module_name) {
             Some(state) => match state {
-                ModuleState::Processing => panic!("circular depedency"),
-                ModuleState::Processed => return Ok(()),
+                Processing => panic!("circular depedency"),
+                Processed => return Ok(()),
             },
-            None => self.module_state_map.insert(module_name.clone(), ModuleState::Processing),
+            None => self.module_state_map.insert(module_name.clone(), Processing),
         };
 
         let module = self.module_map.remove(&module_name).expect("undefined module");
@@ -37,13 +31,13 @@ impl ModuleSort {
         }
 
         self.sorted.push(module);
-        self.module_state_map.insert(module_name, ModuleState::Processed);
+        self.module_state_map.insert(module_name, Processed);
 
         Ok(())
     }
 }
 
-pub fn toposort_modules(modules: Vec<Module>) -> SortResult<Vec<Module>> {
+pub fn toposort_modules(modules: Vec<Module>) -> Result<Vec<Module>, Error> {
     let mut module_map: HashMap<Vec<String>, Module> = HashMap::new();
     let mut queue = Vec::new();
 

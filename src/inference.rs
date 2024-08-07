@@ -24,8 +24,8 @@ enum TypeError {
 }
 
 impl TypeInference {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> TypeInference {
+        TypeInference {
             unification_table: InPlaceUnificationTable::new(),
             expr_type_map: HashMap::new(),
         }

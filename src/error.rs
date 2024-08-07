@@ -1,32 +1,59 @@
-use ariadne::{Report, ReportKind, Source};
-use logos::Span;
+use std::fmt::Display;
 
-use crate::ast::NodeSource;
+use crate::types::Type;
+use crate::cache::Location;
 
-#[derive(Debug)]
-pub struct CompilerError<E> {
-    error: E,
-    span: Option<Span>,
-    file_path: String,
+pub enum ErrorKind {
+    // Parser errors
+    ReachedEnd,
+    UnknownToken,
+    ExpectedOneOf(Vec<String>),
+    ExpectedIndent(usize, usize),
+
+    // Module sort errors
+    CircularDependency,
+    UndefinedModule,
+
+    // Type inference errors
+    TypeMismatch(Type, Type),
+    InfiniteType,
 }
 
-impl<E> CompilerError<E> {
-    pub fn new(error: E, span: Option<Span>, file_path: String) -> Self {
-        Self {
+pub struct Error {
+    error: ErrorKind,
+    location: Location,
+}
+
+impl Error {
+    pub fn new(error: ErrorKind, location: Location) -> Error {
+        Error {
             error,
-            span,
-            file_path,
+            location,
         }
     }
+}
 
-    pub fn from_source(error: E, source: NodeSource) -> Self {
-        Self::new(error, Some(source.span), source.file_path)
-    }
+impl Display for ErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ErrorKind::*;
 
-    pub fn report(&self) {
-        Report::<Span>::build(ReportKind::Error, (), 0)
-            .with_message("reached end")
-            .finish()
-            .print(Source::from(self.file_path.clone())).unwrap();
+        match self {
+            ReachedEnd => write!(f, "Reached end of input"),
+            UnknownToken => write!(f, "Encountered unknown token here"),
+            ExpectedOneOf(items) => {
+                if items.len() == 1 {
+                    write!(f, "Expected {} here", items[0])
+                } else {
+                    write!(f, "Expected one of {} here", items.join(", "))
+                }
+            },
+            ExpectedIndent(expected, got) => write!(f, "Expected {}-wide indent here, got {}-wide", expected, got),
+
+            CircularDependency => write!(f, "Modules have a circular dependency"),
+            UndefinedModule => write!(f, "Could not find module"),
+
+            TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
+            InfiniteType => write!(f, "Attempt to construct infinite type here"),
+        }
     }
 }
