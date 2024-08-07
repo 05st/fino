@@ -1,4 +1,8 @@
 use std::fmt::Display;
+use std::fs::read_to_string;
+
+use ariadne::{Color, Label, Report, ReportKind, Source};
+use logos::Span;
 
 use crate::cache::Location;
 use crate::types::Type;
@@ -27,6 +31,20 @@ pub struct Error {
 impl Error {
     pub fn new(error: ErrorKind, location: Location) -> Error {
         Error { error, location }
+    }
+
+    pub fn report(&self) {
+        // File was already read for input to parser, we should probably cache that and
+        // use it here instead of reading it again.
+        let source = read_to_string(self.location.filepath.as_path()).unwrap();
+        let filename = self.location.filepath.to_string_lossy().into_owned();
+
+        Report::build(ReportKind::Error, &filename, self.location.span.start)
+            .with_message(self.error.to_string())
+            .with_label(Label::new((&filename, self.location.span.clone())).with_color(Color::Red))
+            .finish()
+            .eprint((&filename, Source::from(source)))
+            .unwrap();
     }
 }
 

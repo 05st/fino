@@ -64,12 +64,12 @@ impl<'a> Parser<'a> {
 
     // TODO:
     // Maybe define some macros instead
-    fn create_error(&self, error: ErrorKind, span: Span) -> Error {
+    fn make_error(&self, error: ErrorKind, span: Span) -> Error {
         Error::new(error, Location::new(self.filepath.clone(), span))
     }
 
     fn error<T>(&self, error: ErrorKind, span: Span) -> Result<T, Error> {
-        Err(self.create_error(error, span))
+        Err(self.make_error(error, span))
     }
 
     // The next few functions can throw a ReachedEnd error which is supposed to have
@@ -81,7 +81,7 @@ impl<'a> Parser<'a> {
         let result = self
             .tokens
             .pop_front()
-            .ok_or(self.create_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))?;
+            .ok_or(self.make_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))?;
 
         self.previous = Some(result.clone());
         Ok(result)
@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
         self.tokens
             .front()
             .map(|t| &t.0)
-            .ok_or(self.create_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))
+            .ok_or(self.make_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))
     }
 
     // Span of current token
@@ -105,7 +105,7 @@ impl<'a> Parser<'a> {
         self.tokens
             .front()
             .map(|t| t.1.clone())
-            .ok_or(self.create_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))
+            .ok_or(self.make_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))
     }
 
     // Consume specific token variant
@@ -200,6 +200,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // Parse if expression
     fn parse_if_expr(&mut self) -> Result<Expr, Error> {
         let if_span = self.span()?;
         self.expect(Token::KwIf)?;
@@ -219,6 +220,7 @@ impl<'a> Parser<'a> {
         })
     }
 
+    // Parse expression atom (i.e. literal, variable, parenthesized expression)
     fn parse_atom(&mut self) -> Result<Expr, Error> {
         let (token, span) = self.next_with_span()?;
         match token {
@@ -279,7 +281,8 @@ impl<'a> Parser<'a> {
             _ => self.error(expected_one_of!("identifier", "literal", "'('"), span),
         }
     }
-
+    
+    // Parse function application
     fn parse_fn_app(&mut self) -> Result<Expr, Error> {
         let mut result = self.parse_atom()?;
 
@@ -355,6 +358,7 @@ impl<'a> Parser<'a> {
         })
     }
 
+    // Parse top-level let-definition
     fn parse_let_item(&mut self) -> Result<Item, Error> {
         self.expect(Token::KwLet)?;
         let name = self.expect_identifier()?;
@@ -411,7 +415,9 @@ impl<'a> Parser<'a> {
         Ok(export)
     }
 
-    pub fn parse(&mut self, input: &String, module_name: Vec<String>) -> Result<Module, Error> {
+    pub fn parse(&mut self, input: &String, module_name: Vec<String>, filepath: PathBuf) -> Result<Module, Error> {
+        self.filepath = filepath;
+
         // Tokenize input
         let lexer = Token::lexer(input).spanned();
 
@@ -427,11 +433,6 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
-        }
-
-        // DEBUG
-        for tok in self.tokens.clone() {
-            println!("{:#?}", tok);
         }
 
         // Parse input

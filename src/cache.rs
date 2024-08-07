@@ -2,12 +2,12 @@ use std::{collections::HashMap, path::PathBuf};
 
 use logos::Span;
 
-use crate::ast::NodeId;
+use crate::{ast::NodeId, error::{Error, ErrorKind}};
 
 #[derive(Debug, Clone)]
 pub struct Location {
-    filepath: PathBuf,
-    span: Span,
+    pub filepath: PathBuf,
+    pub span: Span,
 }
 
 impl Location {
@@ -18,4 +18,10 @@ impl Location {
 
 pub struct CompilerCache {
     pub location_map: HashMap<NodeId, Location>,
+}
+
+impl CompilerCache {
+    pub fn make_error(&self, error: ErrorKind, node_id: &NodeId) -> Error {
+        Error::new(error, self.location_map[node_id].clone())
+    }
 }

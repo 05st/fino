@@ -84,18 +84,18 @@ fn main() {
 
     let mut parser = Parser::new(&mut compiler_cache);
     for entry in files_iter {
-        let file_path = entry.path();
-        let input = read_to_string(file_path).expect(format!("Failed to read file {:?}", file_path).as_str());
+        let filepath = entry.path();
+        let input = read_to_string(filepath).expect(format!("Failed to read file {:?}", filepath).as_str());
 
-        let parse_result = parser.parse(&input, get_module_name(root_path, file_path));
+        let parse_result = parser.parse(&input, get_module_name(root_path, filepath), filepath.to_path_buf());
         match parse_result {
             Ok(module) => program.push(module),
-            Err(err) => todo!(),
+            Err(err) => err.report(),
         }
     }
 
-    match toposort_modules(program) {
+    match toposort_modules(&mut compiler_cache, program) {
         Ok(sorted_program) => println!("{:?}", sorted_program),
-        Err(sort_err) => todo!(),
+        Err(err) => err.report(),
     }
 }
