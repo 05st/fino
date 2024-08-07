@@ -12,11 +12,14 @@ pub enum ErrorKind {
     ReachedEnd,
     UnknownToken,
     ExpectedOneOf(Vec<String>),
-    ExpectedIndent(usize, usize),
+    UnexpectedIndent(usize),
 
     // Module sort errors
     CircularDependency,
-    UndefinedModule,
+    UnknownModule,
+
+    // Name resolution errors
+    UnknownVariable,
 
     // Type inference errors
     TypeMismatch(Type, Type),
@@ -62,10 +65,12 @@ impl Display for ErrorKind {
                     write!(f, "Expected one of {} here", items.join(", "))
                 }
             },
-            ExpectedIndent(expected, got) => write!(f, "Expected {}-wide indent here, got {}-wide", expected, got),
+            UnexpectedIndent(size) => write!(f, "Unexpected indent of size {} here", size),
 
             CircularDependency => write!(f, "Modules have a circular dependency"),
-            UndefinedModule => write!(f, "Could not find module"),
+            UnknownModule => write!(f, "Could not find module"),
+
+            UnknownVariable => write!(f, "Unknown variable"),
 
             TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
             InfiniteType => write!(f, "Attempt to construct infinite type here"),

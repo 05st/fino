@@ -2,12 +2,12 @@ use std::{
     collections::HashMap, fs::read_to_string, path::Path
 };
 
-use ast::Module;
 use cache::CompilerCache;
 use clap::Parser as _;
+use error::Error;
 use modulesort::toposort_modules;
 use parser::Parser;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 mod ast;
 mod cache;
@@ -60,17 +60,33 @@ fn get_module_name(root: &Path, file: &Path) -> Vec<String> {
     }
 }
 
-fn main() {
-    let args = Args::parse();
-    let root_path = Path::new(&args.src);
-
+fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
     let mut compiler_cache = CompilerCache {
         location_map: HashMap::new(),
     };
 
-    let mut program: Vec<Module> = Vec::new();
+    let mut parser = Parser::new(&mut compiler_cache);
+    let mut program = Vec::new();
 
-    let files_iter = WalkDir::new(root_path)
+    for file in files {
+        let path = file.path();
+        let source = read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
+    
+        program.push(parser.parse(&source, get_module_name(root, path), path.to_path_buf())?);
+    }
+
+    program = toposort_modules(&mut compiler_cache, program)?;
+
+    println!("{:?}", program);
+
+    Ok(())
+}
+
+fn main() {
+    let args = Args::parse();
+    let root = Path::new(&args.src);
+
+    let files = WalkDir::new(root)
         .into_iter()
         .map(|e| match e {
             Ok(entry) => entry,
@@ -80,22 +96,9 @@ fn main() {
                 .to_str()
                 .map(|s| s.ends_with(FINO_FILE_EXTENSION))
                 .unwrap_or(false)
-        });
-
-    let mut parser = Parser::new(&mut compiler_cache);
-    for entry in files_iter {
-        let filepath = entry.path();
-        let input = read_to_string(filepath).expect(format!("Failed to read file {:?}", filepath).as_str());
-
-        let parse_result = parser.parse(&input, get_module_name(root_path, filepath), filepath.to_path_buf());
-        match parse_result {
-            Ok(module) => program.push(module),
-            Err(err) => err.report(),
-        }
-    }
-
-    match toposort_modules(&mut compiler_cache, program) {
-        Ok(sorted_program) => println!("{:?}", sorted_program),
-        Err(err) => err.report(),
+        }).collect::<Vec<DirEntry>>();
+    
+    if let Err(err) = run_compiler(files, root) {
+        err.report();
     }
 }

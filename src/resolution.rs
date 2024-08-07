@@ -1,15 +1,14 @@
 use crate::{
-    ast::{Item, Module},
-    error::Error,
+    ast::{Item, Module, Name}, cache::CompilerCache, error::Error
 };
 
-enum ResolveError {}
+struct NameResolution<'a> {
+    compiler_cache: &'a mut CompilerCache,
+}
 
-struct NameResolution {}
-
-impl NameResolution {
-    pub fn new() -> NameResolution {
-        todo!()
+impl<'a> NameResolution<'a> {
+    pub fn new(compiler_cache: &'a mut CompilerCache) -> NameResolution<'a> {
+        NameResolution { compiler_cache }
     }
 
     fn resolve_item(&mut self, item: &mut Item) -> Result<(), Error> {

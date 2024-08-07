@@ -428,11 +428,15 @@ impl<'a> Parser<'a> {
                 (Err(lexer_error), span) => return {
                     // Translate lexer errors
                     match lexer_error {
-                        LexerError::ExpectedIndent(expected, got) => self.error(ErrorKind::ExpectedIndent(expected, got), span),
+                        LexerError::UnexpectedIndent(size) => self.error(ErrorKind::UnexpectedIndent(size), span),
                         LexerError::Default => self.error(ErrorKind::UnknownToken, span),
                     }
                 }
             }
+        }
+
+        for token in self.tokens.clone() {
+            println!("{:#?}", token);
         }
 
         // Parse input

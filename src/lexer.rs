@@ -4,8 +4,7 @@ use logos::{skip, FilterResult, Lexer, Logos};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum LexerError {
-    // (expected, got)
-    ExpectedIndent(usize, usize),
+    UnexpectedIndent(usize),
     #[default]
     Default,
 }
@@ -131,7 +130,12 @@ pub enum Token {
 }
 
 fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
-    let cur_col = lexer.extras.last().copied().unwrap_or(0);
+    let cur_col = lexer
+        .extras
+        .last()
+        .copied()
+        .unwrap_or(0);
+
     let new_col = lexer
         .slice()
         .chars()
@@ -140,16 +144,15 @@ fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerErr
 
     match new_col.cmp(&cur_col) {
         std::cmp::Ordering::Less => {
-            lexer
-                .extras
-                .pop()
-                .expect("lexer whitespace_callback new_col < 0");
+            if lexer.extras.contains(&new_col) || new_col == 0 {
+                // Drop all indentation levels greater than new_col
+                while lexer.extras.last().copied().unwrap_or(0) != new_col {
+                    lexer.extras.pop();
+                }
 
-            let prev_col = lexer.extras.last().copied().unwrap_or(0);
-            if new_col != prev_col {
-                FilterResult::Error(LexerError::ExpectedIndent(prev_col, new_col))
-            } else {
                 FilterResult::Emit(Token::Dedent)
+            } else {
+                FilterResult::Error(LexerError::UnexpectedIndent(new_col))
             }
         }
 

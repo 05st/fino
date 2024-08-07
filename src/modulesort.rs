@@ -34,7 +34,7 @@ impl ModuleSort<'_> {
             // Need to use ok_or_else() with a thunk since ok_or() is eagerly evaluated and
             // will panic on the unwrap() when import_node_id is None for top-level dfs()
             // calls.
-            .ok_or_else(|| self.compiler_cache.make_error(ErrorKind::UndefinedModule, import_node_id.unwrap()))?;
+            .ok_or_else(|| self.compiler_cache.make_error(ErrorKind::UnknownModule, import_node_id.unwrap()))?;
 
         for import in &module.imports {
             self.dfs(import.module_name.clone(), Some(&import.node_id))?;
