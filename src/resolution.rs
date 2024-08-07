@@ -3,13 +3,9 @@ use crate::{
     error::Error,
 };
 
-enum ResolveError {
+enum ResolveError {}
 
-}
-
-struct NameResolution {
-
-}
+struct NameResolution {}
 
 impl NameResolution {
     pub fn new() -> NameResolution {

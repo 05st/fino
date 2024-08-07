@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
-use crate::types::Type;
 use crate::cache::Location;
+use crate::types::Type;
 
 pub enum ErrorKind {
     // Parser errors
@@ -26,10 +26,7 @@ pub struct Error {
 
 impl Error {
     pub fn new(error: ErrorKind, location: Location) -> Error {
-        Error {
-            error,
-            location,
-        }
+        Error { error, location }
     }
 }
 

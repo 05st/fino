@@ -7,7 +7,7 @@ pub enum LexerError {
     // (expected, got)
     ExpectedIndent(usize, usize),
     #[default]
-    Default
+    Default,
 }
 
 #[derive(Clone, Debug, Logos, PartialEq)]
@@ -76,7 +76,7 @@ pub enum Token {
     LitChar(char),
 
     #[token("()")]
-    ClosedParens,    
+    ClosedParens,
     #[token("(")]
     LeftParen,
     #[token(")")]
@@ -132,12 +132,19 @@ pub enum Token {
 
 fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
     let cur_col = lexer.extras.last().copied().unwrap_or(0);
-    let new_col = lexer.slice().chars().filter(|ch| *ch == ' ' || *ch == '\t').count();
+    let new_col = lexer
+        .slice()
+        .chars()
+        .filter(|ch| *ch == ' ' || *ch == '\t')
+        .count();
 
     match new_col.cmp(&cur_col) {
         std::cmp::Ordering::Less => {
-            lexer.extras.pop().expect("lexer whitespace_callback new_col < 0");
-            
+            lexer
+                .extras
+                .pop()
+                .expect("lexer whitespace_callback new_col < 0");
+
             let prev_col = lexer.extras.last().copied().unwrap_or(0);
             if new_col != prev_col {
                 FilterResult::Error(LexerError::ExpectedIndent(prev_col, new_col))

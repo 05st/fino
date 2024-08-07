@@ -1,13 +1,11 @@
-use std::{
-    collections::VecDeque, ops::Range, path::PathBuf,
-};
+use std::{collections::VecDeque, ops::Range, path::PathBuf};
 
 use crate::{
     ast::*,
     cache::{CompilerCache, Location},
     error::{Error, ErrorKind},
     lexer::{LexerError, Token},
-    types::{Type, TypeVar}
+    types::{Type, TypeVar},
 };
 use logos::{Logos, Span};
 
@@ -80,7 +78,8 @@ impl<'a> Parser<'a> {
 
     // Advance token stream and return popped (token, span)
     fn next_with_span(&mut self) -> Result<(Token, Span), Error> {
-        let result = self.tokens
+        let result = self
+            .tokens
             .pop_front()
             .ok_or(self.create_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))?;
 
@@ -94,7 +93,7 @@ impl<'a> Parser<'a> {
     }
 
     // Peek current token
-    fn peek(&mut self) -> Result<&Token, Error>  {
+    fn peek(&mut self) -> Result<&Token, Error> {
         self.tokens
             .front()
             .map(|t| &t.0)
@@ -228,7 +227,7 @@ impl<'a> Parser<'a> {
                 let expr = self.parse_expr()?;
                 self.expect(Token::RightParen)?;
                 Ok(expr)
-            },
+            }
 
             Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => {
                 // Parse qualified name if we see '::' token
@@ -243,9 +242,9 @@ impl<'a> Parser<'a> {
                 Ok(Expr::Var {
                     node_id: self.cache_location(span),
                     def_id: DefId(0),
-                    name: name
+                    name: name,
                 })
-            },
+            }
 
             Token::LitBool(b) => Ok(Expr::Lit {
                 node_id: self.cache_location(span),
@@ -340,13 +339,13 @@ impl<'a> Parser<'a> {
         params.reverse();
 
         // Desugar function into definition with curried lambdas
-        let lambda = params.into_iter().fold(body, |child, (param_name, span)| {
-            Expr::Lam {
+        let lambda = params
+            .into_iter()
+            .fold(body, |child, (param_name, span)| Expr::Lam {
                 node_id: self.cache_location(span),
                 param_def_id: DefId(0),
                 param: param_name,
                 body: Box::new(child),
-            }
         });
 
         Ok(Item {
@@ -420,7 +419,8 @@ impl<'a> Parser<'a> {
         for lex in lexer {
             match lex {
                 (Ok(token), span) => self.tokens.push_back((token, span)),
-                (Err(lexer_error), span) => return {
+                (Err(lexer_error), span) => {
+                    return {
                     // Translate lexer errors
                     match lexer_error {
                         LexerError::ExpectedIndent(expected, got) => self.error(ErrorKind::ExpectedIndent(expected, got), span),
@@ -452,8 +452,11 @@ impl<'a> Parser<'a> {
 
                     _ => {
                         let span = self.span()?;
-                        return self.error(expected_one_of!("'import'", "'export'", "top-level definition"), span);
-                    },
+                        return self.error(
+                            expected_one_of!("'import'", "'export'", "top-level definition"),
+                            span,
+                        );
+                    }
                 }
             } else {
                 break;

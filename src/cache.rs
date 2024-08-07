@@ -12,10 +12,7 @@ pub struct Location {
 
 impl Location {
     pub fn new(filepath: PathBuf, span: Span) -> Self {
-        Location {
-            filepath,
-            span,
-        }
+        Location { filepath, span }
     }
 }
 
