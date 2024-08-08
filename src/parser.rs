@@ -315,6 +315,8 @@ impl<'a> Parser<'a> {
     // Parse and desugar top-level function definition
     fn parse_fn_item(&mut self) -> Result<Item, Error> {
         self.expect(Token::KwFn)?;
+
+        let span = self.span()?;
         let fn_name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
@@ -352,7 +354,9 @@ impl<'a> Parser<'a> {
         });
 
         Ok(Item {
+            node_id: self.cache_location(span),
             name: fn_name,
+            def_id: DefId(0),
             type_ann,
             expr: lambda,
         })
@@ -361,6 +365,8 @@ impl<'a> Parser<'a> {
     // Parse top-level let-definition
     fn parse_let_item(&mut self) -> Result<Item, Error> {
         self.expect(Token::KwLet)?;
+
+        let span = self.span()?;
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
@@ -372,7 +378,9 @@ impl<'a> Parser<'a> {
         self.expect(Token::Newline)?;
 
         Ok(Item {
+            node_id: self.cache_location(span),
             name,
+            def_id: DefId(0),
             type_ann,
             expr,
         })

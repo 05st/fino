@@ -20,6 +20,7 @@ pub enum ErrorKind {
 
     // Name resolution errors
     UnknownVariable(Name),
+    Redefinition(Vec<String>),
 
     // Type inference errors
     TypeMismatch(Type, Type),
@@ -76,6 +77,7 @@ impl Display for ErrorKind {
                     Name::Unqualified(ident) => write!(f, "Unknown variable {}", ident),
                 }
             },
+            Redefinition(qual) => write!(f, "{} is already defined", qual.join("::")),
 
             TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
             InfiniteType => write!(f, "Attempt to construct infinite type here"),

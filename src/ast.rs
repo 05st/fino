@@ -9,7 +9,7 @@ pub struct DefId(pub usize);
 // A qualified name contains the entire path to the name. For example,
 // 'abc::xyz::func' is a qualified name. An unqualified name would just be
 // 'func'.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Name {
     Unqualified(String),
     Qualified(Vec<String>),
@@ -34,6 +34,8 @@ pub enum Expr {
     Var {
         node_id: NodeId,
         def_id: DefId,
+        // A variable can be a qualified or unqualified name. A variable written as a
+        // qualified names can only refer to a top-level definition.
         name: Name,
     },
     App {
@@ -60,7 +62,9 @@ pub enum Expr {
 // given by module_name ++ name;
 #[derive(Debug)]
 pub struct Item {
+    pub node_id: NodeId,
     pub name: String,
+    pub def_id: DefId,
     pub type_ann: Type,
     pub expr: Expr,
 }
