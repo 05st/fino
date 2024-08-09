@@ -97,6 +97,16 @@ impl<'a> NameResolver<'a> {
                 let new_scope = scope.update(param.clone(), param_def_id.clone());
                 self.resolve_expr(body, new_scope)
             }
+            ExprKind::Let { ref mut def_id, name, expr, body } => {
+                // Note we don't put def_id into the scope yet, so recursive let-expressions
+                // aren't allowed (for now).
+                self.resolve_expr(expr, scope.clone())?;
+
+                *def_id = self.new_def_id();
+                let new_scope = scope.update(name.clone(), def_id.clone());
+
+                self.resolve_expr(body, new_scope)
+            }
             ExprKind::If { ref mut cond, ref mut texpr, ref mut fexpr } => {
                 self.resolve_expr(cond, scope.clone())?;
                 self.resolve_expr(texpr, scope.clone())?;

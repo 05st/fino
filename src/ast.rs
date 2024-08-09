@@ -45,6 +45,12 @@ pub enum ExprKind {
         param: String,
         body: Box<Expr>,
     },
+    Let {
+        def_id: DefId,
+        name: String,
+        expr: Box<Expr>,
+        body: Box<Expr>,
+    },
     If {
         cond: Box<Expr>,
         texpr: Box<Expr>,

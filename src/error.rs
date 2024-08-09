@@ -7,6 +7,7 @@ use crate::ast::Name;
 use crate::cache::Location;
 use crate::types::Type;
 
+#[derive(Debug)]
 pub enum ErrorKind {
     // Parser errors
     ReachedEnd,
@@ -27,6 +28,7 @@ pub enum ErrorKind {
     InfiniteType(Type),
 }
 
+#[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
     location: Location,

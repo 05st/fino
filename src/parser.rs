@@ -194,6 +194,28 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_let_expr(&mut self) -> Result<Expr, Error> {
+        let let_span = self.span()?;
+        self.expect(Token::KwLet)?;
+
+        let name = self.expect_identifier()?;
+        self.expect(Token::Equal)?;
+        let expr = self.parse_expr()?;
+
+        self.expect(Token::KwIn)?;
+        let body = self.parse_expr()?;
+
+        Ok(Expr {
+            node_id: self.cache_location(let_span),
+            kind: ExprKind::Let {
+                def_id: DefId(0),
+                name,
+                expr: Box::new(expr),
+                body: Box::new(body),
+            },
+        })
+    }
+
     // Parse if expression
     fn parse_if_expr(&mut self) -> Result<Expr, Error> {
         let if_span = self.span()?;
@@ -281,7 +303,7 @@ impl<'a> Parser<'a> {
                 },
             }),
 
-            Token::ClosedParens => Ok(Expr {
+            Token::LitUnit => Ok(Expr {
                 node_id: self.cache_location(span),
                 kind: ExprKind::Lit {
                     literal: Lit::Unit,
@@ -293,34 +315,52 @@ impl<'a> Parser<'a> {
     }
 
     // Parse function application
-    fn parse_fn_app(&mut self) -> Result<Expr, Error> {
+    fn parse_app(&mut self) -> Result<Expr, Error> {
         let mut result = self.parse_atom()?;
 
-        // Need to get span for possible arg expr before parse_atom() is
-        // called because it consumes the token, so we can't get the span
-        // afterwards.
+        // This is such a hack. We only discard the error from parse_atom() if it fails
+        // to match the first token of the atom. Otherwise, if the first token matches
+        // as an atom, we should go through with parsing the atom and report any
+        // failure. Find better way to do this.
+        let mut next_tmp = self.peek()?.clone();
+
+        // Need to get span for possible arg expr before parse_atom() is called because
+        // it consumes the token, so we can't get the span afterwards.
         let mut arg_span = self.span()?;
-        while let Ok(arg_expr) = self.parse_atom() {
+        let mut arg_result = self.parse_atom();
+
+        while arg_result.is_ok() {
             result = Expr {
                 node_id: self.cache_location(arg_span),
                 kind: ExprKind::App {
                     fun: Box::new(result),
-                    arg: Box::new(arg_expr),
+                    arg: Box::new(arg_result.unwrap()),
                 },
             };
+
             arg_span = self.span()?;
+            next_tmp = self.peek()?.clone();
+            arg_result = self.parse_atom();
         }
+
         // When parsing atom fails, restore token consumed by parse_atom()
         self.restore();
-
-        Ok(result)
+        // If restored token doesn't match next token after attempting parse_atom(),
+        // then it matched the first token of an atom, so we should go through with it
+        // and report the failure.
+        if *self.peek()? != next_tmp {
+            Err(arg_result.unwrap_err())
+        } else {
+            Ok(result)
+        }
     }
 
     // Parse expression
     fn parse_expr(&mut self) -> Result<Expr, Error> {
         match self.peek()? {
+            Token::KwLet => self.parse_let_expr(),
             Token::KwIf => self.parse_if_expr(),
-            _ => self.parse_fn_app(),
+            _ => self.parse_app(),
         }
     }
 

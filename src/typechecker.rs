@@ -98,6 +98,17 @@ impl<'a> TypeChecker<'a> {
                 )
             }
 
+            ExprKind::Let { def_id, name: _, expr, body } => {
+                let (expr_constraints, def_type) = self.infer_expr(env.clone(), &expr);
+                let new_env = env.update(def_id.clone(), def_type);
+                let (body_constraints, body_type) = self.infer_expr(new_env, &body);
+
+                (
+                    expr_constraints.into_iter().chain(body_constraints).collect(),
+                    body_type,
+                )
+            }
+
             ExprKind::If { cond, texpr, fexpr } => {
                 let cond_constraints = self.check_expr(env.clone(), &cond, Type::bool());
 

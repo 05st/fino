@@ -73,9 +73,9 @@ pub enum Token {
     // Properly parse escape sequences
     #[regex(r"'.'", |lex| lex.slice().chars().nth(1).to_owned())]
     LitChar(char),
-
     #[token("()")]
-    ClosedParens,
+    LitUnit,
+
     #[token("(")]
     LeftParen,
     #[token(")")]
@@ -83,30 +83,12 @@ pub enum Token {
 
     #[token("=")]
     Equal,
-    #[token("==")]
-    EqualEqual,
-
-    #[token("+")]
-    Plus,
-    #[token("-")]
-    Dash,
-    #[token("*")]
-    Asterisk,
-    #[token("/")]
-    Slash,
-
-    #[token(".")]
-    Dot,
     #[token("|")]
     Bar,
-
     #[token(":")]
     Colon,
     #[token("::")]
     ColonColon,
-
-    #[token("\\")]
-    Backslash,
 
     #[token("->")]
     SmallArrow,
@@ -123,9 +105,13 @@ pub enum Token {
     #[regex(r"[ \t]+", skip)]
     Space,
 
-    #[regex(r"[A-Z]\w*", |lex| lex.slice().to_owned())]
+    // Priority is set lower for these three because the patterns can also match
+    // reserved keywords / operators.
+    #[regex(r"[\+\-*\/^!|<>=.?$@#%:]+", priority = 1, callback = |lex| lex.slice().to_owned())]
+    Operator(String),
+    #[regex(r"[A-Z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
     UpperIdentifier(String),
-    #[regex(r"[a-z]\w*", |lex| lex.slice().to_owned())]
+    #[regex(r"[a-z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
     LowerIdentifier(String),
 }
 
@@ -191,26 +177,20 @@ impl Display for Token {
             Token::LitFloat(_) => write!(f, "float"),
             Token::LitBool(_) => write!(f, "boolean"),
             Token::LitChar(_) => write!(f, "character"),
-            Token::ClosedParens => write!(f, "()"),
+            Token::LitUnit => write!(f, "()"),
             Token::LeftParen => write!(f, "("),
             Token::RightParen => write!(f, ")"),
             Token::Equal => write!(f, "="),
-            Token::EqualEqual => write!(f, "=="),
-            Token::Plus => write!(f, "+"),
-            Token::Dash => write!(f, "-"),
-            Token::Asterisk => write!(f, "*"),
-            Token::Slash => write!(f, "/"),
-            Token::Dot => write!(f, "."),
             Token::Bar => write!(f, "|"),
             Token::Colon => write!(f, ":"),
             Token::ColonColon => write!(f, "::"),
-            Token::Backslash => write!(f, "\\"),
             Token::SmallArrow => write!(f, "->"),
             Token::BigArrow => write!(f, "=>"),
             Token::Indent => write!(f, "indentation"),
             Token::Dedent => write!(f, "de-indentation"),
             Token::Newline => write!(f, "newline"),
             Token::Space => write!(f, "space"),
+            Token::Operator(_) => write!(f, "operator"),
             Token::UpperIdentifier(_) => write!(f, "uppercase identifier"),
             Token::LowerIdentifier(_) => write!(f, "lowercase identifier"),
         }
