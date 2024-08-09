@@ -2,7 +2,11 @@ use std::{collections::HashMap, path::PathBuf};
 
 use logos::Span;
 
-use crate::{ast::NodeId, error::{Error, ErrorKind}, types::Type};
+use crate::{
+    ast::NodeId,
+    error::{Error, ErrorKind},
+    types::Type,
+};
 
 #[derive(Debug, Clone)]
 pub struct Location {

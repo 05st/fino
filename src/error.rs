@@ -24,7 +24,7 @@ pub enum ErrorKind {
 
     // Type inference errors
     TypeMismatch(Type, Type),
-    InfiniteType(Type)
+    InfiniteType(Type),
 }
 
 pub struct Error {
@@ -65,17 +65,15 @@ impl Display for ErrorKind {
                 } else {
                     write!(f, "Expected one of {} here", items.join(", "))
                 }
-            },
+            }
             UnexpectedIndent(size) => write!(f, "Unexpected indent of size {} here", size),
 
             CircularDependency => write!(f, "Modules have a circular dependency"),
             UnknownModule => write!(f, "Could not find module"),
 
-            UnknownVariable(name) => {
-                match name {
-                    Name::Qualified(qual) => write!(f, "Unknown variable {}", qual.join("::")),
-                    Name::Unqualified(ident) => write!(f, "Unknown variable {}", ident),
-                }
+            UnknownVariable(name) => match name {
+                Name::Qualified(qual) => write!(f, "Unknown variable {}", qual.join("::")),
+                Name::Unqualified(ident) => write!(f, "Unknown variable {}", ident),
             },
             Redefinition(qual) => write!(f, "{} is already defined", qual.join("::")),
 

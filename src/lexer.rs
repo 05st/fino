@@ -130,11 +130,7 @@ pub enum Token {
 }
 
 fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
-    let cur_col = lexer
-        .extras
-        .last()
-        .copied()
-        .unwrap_or(0);
+    let cur_col = lexer.extras.last().copied().unwrap_or(0);
 
     let new_col = lexer
         .slice()

@@ -46,7 +46,9 @@ impl<'a> Parser<'a> {
         self.node_id_count += 1;
 
         let location = Location::new(self.filepath.clone(), span);
-        self.compiler_cache.location_map.insert(node_id.clone(), location);
+        self.compiler_cache
+            .location_map
+            .insert(node_id.clone(), location);
 
         node_id
     }
@@ -240,7 +242,7 @@ impl<'a> Parser<'a> {
                     kind: ExprKind::Var {
                         def_id: DefId(0),
                         name: name,
-                    }
+                    },
                 })
             }
 
@@ -289,7 +291,7 @@ impl<'a> Parser<'a> {
             _ => self.error(expected_one_of!("identifier", "literal", "'('"), span),
         }
     }
-    
+
     // Parse function application
     fn parse_fn_app(&mut self) -> Result<Expr, Error> {
         let mut result = self.parse_atom()?;
@@ -341,7 +343,9 @@ impl<'a> Parser<'a> {
         loop {
             let (token, span) = self.next_with_span()?;
             match token {
-                Token::UpperIdentifier(param) | Token::LowerIdentifier(param) => params.push((param, span)),
+                Token::UpperIdentifier(param) | Token::LowerIdentifier(param) => {
+                    params.push((param, span))
+                }
                 Token::Equal => break,
                 _ => return self.error(expected_one_of!("identifier", "'='"), span),
             }
@@ -349,22 +353,20 @@ impl<'a> Parser<'a> {
 
         let body = self.parse_expr()?;
         self.expect(Token::Dedent)?;
-        
+
         // Reverse for proper fold direction
         params.reverse();
 
         // Desugar function into definition with curried lambdas
         let lambda = params
             .into_iter()
-            .fold(body, |child, (param_name, span)| {
-                Expr {
-                    node_id: self.cache_location(span),
-                    kind: ExprKind::Lam {
-                        param_def_id: DefId(0),
-                        param: param_name,
-                        body: Box::new(child),
-                    },
-                }
+            .fold(body, |child, (param_name, span)| Expr {
+                node_id: self.cache_location(span),
+                kind: ExprKind::Lam {
+                    param_def_id: DefId(0),
+                    param: param_name,
+                    body: Box::new(child),
+                },
             });
 
         Ok(Item {
@@ -388,7 +390,7 @@ impl<'a> Parser<'a> {
 
         self.expect(Token::Equal)?;
         let expr = self.parse_expr()?;
-        
+
         self.expect(Token::Newline)?;
 
         Ok(Item {
@@ -419,7 +421,7 @@ impl<'a> Parser<'a> {
 
         let export = if let Token::KwModule = self.peek()? {
             self.next()?;
-            
+
             Export::Module {
                 node_id: self.cache_location(span),
                 module_name: self.parse_separated_name()?,
@@ -447,11 +449,15 @@ impl<'a> Parser<'a> {
         for lex in lexer {
             match lex {
                 (Ok(token), span) => self.tokens.push_back((token, span)),
-                (Err(lexer_error), span) => return {
-                    // Translate lexer errors
-                    match lexer_error {
-                        LexerError::UnexpectedIndent(size) => self.error(ErrorKind::UnexpectedIndent(size), span),
-                        LexerError::Default => self.error(ErrorKind::UnknownToken, span),
+                (Err(lexer_error), span) => {
+                    return {
+                        // Translate lexer errors
+                        match lexer_error {
+                            LexerError::UnexpectedIndent(size) => {
+                                self.error(ErrorKind::UnexpectedIndent(size), span)
+                            }
+                            LexerError::Default => self.error(ErrorKind::UnknownToken, span),
+                        }
                     }
                 }
             }

@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{ast::{Module, NodeId}, cache::CompilerCache, error::{Error, ErrorKind}};
+use crate::{
+    ast::{Module, NodeId},
+    cache::CompilerCache,
+    error::{Error, ErrorKind},
+};
 
 enum ModuleState {
     Processing,

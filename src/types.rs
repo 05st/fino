@@ -83,7 +83,7 @@ impl Display for Type {
             Type::Var(type_var) => write!(f, "{}", type_var),
             Type::UniVar(uni_var) => write!(f, "{}", uni_var),
             Type::Const(name) => write!(f, "{}", name),
-            Type::Fun(arg, ret) => write!(f, "{} -> {}", arg, ret)
+            Type::Fun(arg, ret) => write!(f, "{} -> {}", arg, ret),
         }
     }
 }

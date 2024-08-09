@@ -47,10 +47,7 @@ impl<'a> TypeChecker<'a> {
                 // Variable is guaranteed to be defined after name resolution
                 let var_type = &env[&def_id];
 
-                (
-                    Vec::new(),
-                    var_type.clone(),
-                )
+                (Vec::new(), var_type.clone())
             }
 
             ExprKind::Lam { param_def_id, param: _, body } => {
@@ -72,10 +69,7 @@ impl<'a> TypeChecker<'a> {
 
                 let fun_constraints = self.check_expr(env, &fun, fun_type);
                 (
-                    arg_constraints
-                        .into_iter()
-                        .chain(fun_constraints)
-                        .collect(),
+                    arg_constraints.into_iter().chain(fun_constraints).collect(),
                     ret_type,
                 )
             }
@@ -128,7 +122,11 @@ impl<'a> TypeChecker<'a> {
 
             (_, expected_type) => {
                 let (mut constraints, inferred_type) = self.infer_expr(env, expr);
-                constraints.push(Constraint::TypeEqual(expected_type, inferred_type, expr.node_id.clone()));
+                constraints.push(Constraint::TypeEqual(
+                    expected_type,
+                    inferred_type,
+                    expr.node_id.clone(),
+                ));
 
                 constraints
             }
@@ -157,9 +155,9 @@ impl<'a> TypeChecker<'a> {
         let right = self.normalize_type(unnorm_right);
 
         match (left, right) {
-            (Type::Var(var_a), Type::Var(var_b)) => (var_a == var_b)
-                .then_some(())
-                .ok_or_else(|| todo!()),
+            (Type::Var(var_a), Type::Var(var_b)) => {
+                (var_a == var_b).then_some(()).ok_or_else(|| todo!())
+            }
             
             (Type::Const(name_a), Type::Const(name_b)) if name_a == name_b => Ok(()),
 
