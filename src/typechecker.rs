@@ -14,8 +14,8 @@ enum Constraint {
 
 struct TypeChecker<'a> {
     compiler_cache: &'a mut CompilerCache,
-    unification_table: InPlaceUnificationTable<TypeUniVar>,
     item_scheme_map: HashMap<DefId, TypeScheme>,
+    unification_table: InPlaceUnificationTable<TypeUniVar>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -241,19 +241,23 @@ pub fn typecheck_program(compiler_cache: &mut CompilerCache, program: &Vec<Modul
         // Typecheck top-level definitions
         for item in &module.items {
             // MAYBE BUG:
-            // Shouldn't we clear unification_table as well here?
+            // Not exactly sure what reset_unifications does. Maybe we should just set
+            // unification_table to InPlaceUnificationTable::new() instead?
+            typechecker.unification_table.reset_unifications(|_| None);
+
             let constraints = typechecker.check_expr(im::HashMap::new(), &item.expr, item.scheme.1.clone());
             typechecker.solve_constraints(constraints)?;
+
+            // Normalize expr_type_map after constraints have been solved
+            // TODO:
+            // Find a better way to do this
+            let expr_type_map = typechecker.compiler_cache.expr_type_map.clone();
+            typechecker.compiler_cache.expr_type_map = expr_type_map
+                .into_iter()
+                .map(|(k, v)| (k, typechecker.normalize_type(v)))
+                .collect::<HashMap<_, _>>();
         }
     }
-
-    // Normalize expr_type_map after all constraints have been solved 
-    // How to do this without clone?
-    let expr_type_map = typechecker.compiler_cache.expr_type_map.clone();
-    compiler_cache.expr_type_map = expr_type_map
-        .into_iter()
-        .map(|(k, v)| (k, typechecker.normalize_type(v)))
-        .collect::<HashMap<_, _>>();
 
     Ok(())
 }
