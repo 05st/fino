@@ -1,22 +1,23 @@
 use std::{
-    collections::HashMap, fs::read_to_string, path::Path
+    fs::read_to_string,
+    path::Path,
 };
 
 use cache::CompilerCache;
 use clap::Parser as _;
 use error::Error;
-use typecheck::TypeChecker;
-use modulesort::toposort_modules;
+use resolver::resolve_program;
+use sorter::sort_program;
 use parser::Parser;
-use resolver::NameResolver;
+use typechecker::typecheck_program;
 use walkdir::{DirEntry, WalkDir};
 
 mod ast;
 mod cache;
 mod error;
-mod typecheck;
+mod typechecker;
 mod lexer;
-mod modulesort;
+mod sorter;
 mod parser;
 mod resolver;
 mod types;
@@ -63,27 +64,21 @@ fn get_module_name(root: &Path, file: &Path) -> Vec<String> {
 }
 
 fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
-    let mut compiler_cache = CompilerCache {
-        location_map: HashMap::new(),
-    };
+    let mut compiler_cache = CompilerCache::new();
+    let mut program = Vec::new();
 
     let mut parser = Parser::new(&mut compiler_cache);
-    let mut program = Vec::new();
 
     for file in files {
         let path = file.path();
         let source = read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
     
-        program.push(parser.parse(&source, get_module_name(root, path), path.to_path_buf())?);
+        program.push(parser.parse_module(&source, get_module_name(root, path), path.to_path_buf())?);
     }
 
-    program = toposort_modules(&mut compiler_cache, program)?;
-
-    let mut resolution = NameResolver::new(&mut compiler_cache);
-    resolution.resolve(&mut program)?;
-
-    let mut inference = TypeChecker::new(&mut compiler_cache);
-    inference.typecheck_modules(&program)?;
+    sort_program(&mut compiler_cache, &mut program)?;
+    resolve_program(&mut compiler_cache, &mut program)?;
+    typecheck_program(&mut compiler_cache, &program)?;
 
     println!("{:?}", program);
 

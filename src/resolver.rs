@@ -6,7 +6,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-pub struct NameResolver<'a> {
+struct NameResolver<'a> {
     compiler_cache: &'a mut CompilerCache,
     // Only top-level functions definitions are stored in qualified_name_map
     qualified_name_map: HashMap<Vec<String>, DefId>,
@@ -16,7 +16,7 @@ pub struct NameResolver<'a> {
 }
 
 impl<'a> NameResolver<'a> {
-    pub fn new(compiler_cache: &'a mut CompilerCache) -> NameResolver<'a> {
+    fn new(compiler_cache: &'a mut CompilerCache) -> NameResolver<'a> {
         NameResolver {
             compiler_cache,
             qualified_name_map: HashMap::new(),
@@ -126,11 +126,12 @@ impl<'a> NameResolver<'a> {
 
         Ok(())
     }
+}
 
-    pub fn resolve(&mut self, modules: &'a mut Vec<Module>) -> Result<(), Error> {
-        for module in modules {
-            self.resolve_module(module)?;
-        }
-        Ok(())
+pub fn resolve_program(compiler_cache: &mut CompilerCache, program: &mut Vec<Module>) -> Result<(), Error> {
+    let mut resolver = NameResolver::new(compiler_cache);
+    for module in program {
+        resolver.resolve_module(module)?;
     }
+    Ok(())
 }

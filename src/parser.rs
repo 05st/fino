@@ -127,14 +127,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Consume capitalized identifier
-    fn expect_upper_identifier(&mut self) -> Result<String, Error> {
-        match self.next_with_span()? {
-            (Token::UpperIdentifier(ident), _) => Ok(ident),
-            (_, span) => self.error(expected_one_of!("capitalized identifier"), span),
-        }
-    }
-
     // Skip newlines while ignoring ReachedEnd error from self.peek()
     fn skip_newlines(&mut self) {
         while let Ok(Token::Newline) = self.peek() {
@@ -445,7 +437,7 @@ impl<'a> Parser<'a> {
         Ok(export)
     }
 
-    pub fn parse(&mut self, input: &String, module_name: Vec<String>, filepath: PathBuf) -> Result<Module, Error> {
+    pub fn parse_module(&mut self, input: &String, module_name: Vec<String>, filepath: PathBuf) -> Result<Module, Error> {
         self.filepath = filepath;
 
         // Tokenize input

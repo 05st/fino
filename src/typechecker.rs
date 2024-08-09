@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ena::unify::InPlaceUnificationTable;
 
 use crate::ast::*;
@@ -7,25 +5,21 @@ use crate::cache::CompilerCache;
 use crate::error::{Error, ErrorKind};
 use crate::types::*;
 
-type TypeEnv = im::HashMap<DefId, Type>;
-
 #[derive(Clone, Debug)]
 enum Constraint {
     TypeEqual(Type, Type, NodeId),
 }
 
-pub struct TypeChecker<'a> {
+struct TypeChecker<'a> {
     compiler_cache: &'a mut CompilerCache,
     unification_table: InPlaceUnificationTable<TypeUniVar>,
-    expr_type_map: HashMap<NodeId, Type>,
 }
 
 impl<'a> TypeChecker<'a> {
-    pub fn new(compiler_cache: &'a mut CompilerCache) -> TypeChecker {
+    fn new(compiler_cache: &'a mut CompilerCache) -> TypeChecker {
         TypeChecker {
             compiler_cache,
             unification_table: InPlaceUnificationTable::new(),
-            expr_type_map: HashMap::new(),
         }
     }
 
@@ -33,7 +27,7 @@ impl<'a> TypeChecker<'a> {
         self.unification_table.new_key(None)
     }
 
-    fn infer_expr(&mut self, env: TypeEnv, expr: &Expr) -> (Vec<Constraint>, Type) {
+    fn infer_expr(&mut self, env: im::HashMap<DefId, Type>, expr: &Expr) -> (Vec<Constraint>, Type) {
         match &expr.kind {
             ExprKind::Lit { literal } => {
                 (
@@ -106,7 +100,7 @@ impl<'a> TypeChecker<'a> {
 
     // TODO:
     // We can probably pass expected_type as a reference here
-    fn check_expr(&mut self, env: TypeEnv, expr: &Expr, expected_type: Type) -> Vec<Constraint> {
+    fn check_expr(&mut self, env: im::HashMap<DefId, Type>, expr: &Expr, expected_type: Type) -> Vec<Constraint> {
         match (&expr.kind, expected_type) {
             (ExprKind::Lit { literal: Lit::Int(_) }, t) if t == Type::i32() => Vec::new(),
             (ExprKind::Lit { literal: Lit::Float(_) }, t) if t == Type::f32() => Vec::new(),
@@ -201,24 +195,26 @@ impl<'a> TypeChecker<'a> {
         }
         Ok(())
     }
+}
 
-    pub fn typecheck_modules(&mut self, modules: &Vec<Module>) -> Result<(), Error> {
-        let mut env: TypeEnv = im::HashMap::new();
-        let mut constraints = Vec::new();
+pub fn typecheck_program(compiler_cache: &mut CompilerCache, program: &Vec<Module>) -> Result<(), Error> {
+    let mut typechecker = TypeChecker::new(compiler_cache);
 
-        for module in modules {
-            // Insert all top-level definitions to environment
-            for item in &module.items {
-                env.insert(item.def_id.clone(), item.type_ann.clone());
-            }
+    let mut env = im::HashMap::new();
+    let mut constraints = Vec::new();
 
-            // Typecheck top-level definitions
-            for item in &module.items {
-                let mut new_constraints = self.check_expr(env.clone(), &item.expr, item.type_ann.clone());
-                constraints.append(&mut new_constraints);
-            }
+    for module in program {
+        // Insert all top-level definitions to environment
+        for item in &module.items {
+            env.insert(item.def_id.clone(), item.type_ann.clone());
         }
 
-        self.solve_constraints(constraints)
+        // Typecheck top-level definitions
+        for item in &module.items {
+            let mut new_constraints = typechecker.check_expr(env.clone(), &item.expr, item.type_ann.clone());
+            constraints.append(&mut new_constraints);
+        }
     }
+
+    typechecker.solve_constraints(constraints)
 }
