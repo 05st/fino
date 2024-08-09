@@ -1,12 +1,6 @@
-use std::fmt::Display;
+use std::{collections::{BTreeSet, HashMap}, fmt::Display};
 
 use ena::unify::{EqUnifyValue, UnifyKey};
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd)]
-pub struct TypeVar(pub String);
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
-pub struct TypeUniVar(u32);
 
 // It is important to note the distinction made between type variables and
 // unification variables. A type variable is rigid, they are universally
@@ -16,7 +10,17 @@ pub struct TypeUniVar(u32);
 // be replaced by fresh unification variables. A unification variable is
 // flexible, they are placeholders for a rigid, concrete type. This could be a
 // type constant, function type, or a type variable as well.
-#[derive(Clone, Debug, Eq, PartialEq)]
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct TypeVar(pub String);
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
+pub struct TypeUniVar(u32);
+
+#[derive(Clone, Debug)]
+pub struct TypeScheme(pub BTreeSet<TypeVar>, pub Type);
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Type {
     Var(TypeVar),
     UniVar(TypeUniVar),
@@ -57,6 +61,8 @@ impl Type {
     // Insert base type constructors
     base_types!(unit, bool, char, str, i32, i64, u32, u64, f32, f64);
 
+    // Checks if self contains uvar, since unifying them would result in attempting
+    // to construct an infinite type.
     pub fn occurs_check(&self, uvar: TypeUniVar) -> Result<(), Type> {
         match self {
             Type::Var(_) | Type::Const(_) => Ok(()),
@@ -72,6 +78,36 @@ impl Type {
             Type::Fun(param, ret) => {
                 param.occurs_check(uvar).map_err(|_| self.clone())?;
                 ret.occurs_check(uvar).map_err(|_| self.clone())
+            }
+        }
+    }
+
+    // Collects type variables into a BTreeSet which is faster to iterate through
+    // than a HashSet.
+    pub fn extract_type_vars(&self, set: &mut BTreeSet<TypeVar>) {
+        match self {
+            Type::Var(tvar) => {
+                set.insert(tvar.clone());
+            }
+            Type::UniVar(_) => (),
+            Type::Const(_) => (),
+            Type::Fun(arg, ret) => {
+                arg.extract_type_vars(set);
+                ret.extract_type_vars(set);
+            }
+        }
+    }
+
+    pub fn substitute(&self, subst: &HashMap<Type, Type>) -> Type {
+        match self {
+            Type::Var(_) | Type::UniVar(_) | Type::Const(_) => {
+                match subst.get(&self) {
+                    None => self.clone(),
+                    Some(new) => new.clone(),
+                }
+            }
+            Type::Fun(arg, ret) => {
+                Type::Fun(Box::new(arg.substitute(subst)), Box::new(ret.substitute(subst)))
             }
         }
     }

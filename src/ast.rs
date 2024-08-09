@@ -1,4 +1,4 @@
-use crate::types::Type;
+use crate::types::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NodeId(pub usize);
@@ -66,7 +66,7 @@ pub struct Item {
     pub node_id: NodeId,
     pub name: String,
     pub def_id: DefId,
-    pub type_ann: Type,
+    pub scheme: TypeScheme,
     pub expr: Expr,
 }
 

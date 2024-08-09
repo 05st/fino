@@ -80,7 +80,8 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
     resolve_program(&mut compiler_cache, &mut program)?;
     typecheck_program(&mut compiler_cache, &program)?;
 
-    println!("{:?}", program);
+    println!("{:#?}", program);
+    println!("{:?}", compiler_cache.expr_type_map);
 
     Ok(())
 }

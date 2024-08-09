@@ -1,11 +1,11 @@
-use std::{collections::VecDeque, ops::Range, path::PathBuf};
+use std::{collections::{BTreeSet, VecDeque}, ops::Range, path::PathBuf};
 
 use crate::{
     ast::*,
     cache::{CompilerCache, Location},
     error::{Error, ErrorKind},
     lexer::{LexerError, Token},
-    types::{Type, TypeVar},
+    types::*,
 };
 use logos::{Logos, Span};
 
@@ -329,10 +329,13 @@ impl<'a> Parser<'a> {
         self.expect(Token::KwFn)?;
 
         let span = self.span()?;
-        let fn_name = self.expect_identifier()?;
+        let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
+
         let type_ann = self.parse_type()?;
+        let mut type_vars = BTreeSet::new();
+        type_ann.extract_type_vars(&mut type_vars);
 
         self.expect(Token::Indent)?;
 
@@ -358,7 +361,7 @@ impl<'a> Parser<'a> {
         params.reverse();
 
         // Desugar function into definition with curried lambdas
-        let lambda = params
+        let expr = params
             .into_iter()
             .fold(body, |child, (param_name, span)| Expr {
                 node_id: self.cache_location(span),
@@ -371,10 +374,10 @@ impl<'a> Parser<'a> {
 
         Ok(Item {
             node_id: self.cache_location(span),
-            name: fn_name,
+            name,
             def_id: DefId(0),
-            type_ann,
-            expr: lambda,
+            scheme: TypeScheme(type_vars, type_ann),
+            expr,
         })
     }
 
@@ -386,7 +389,10 @@ impl<'a> Parser<'a> {
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
+
         let type_ann = self.parse_type()?;
+        let mut type_vars = BTreeSet::new();
+        type_ann.extract_type_vars(&mut type_vars);
 
         self.expect(Token::Equal)?;
         let expr = self.parse_expr()?;
@@ -397,7 +403,7 @@ impl<'a> Parser<'a> {
             node_id: self.cache_location(span),
             name,
             def_id: DefId(0),
-            type_ann,
+            scheme: TypeScheme(type_vars, type_ann),
             expr,
         })
     }

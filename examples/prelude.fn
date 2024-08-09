@@ -1,0 +1,4 @@
+fn id : a -> a
+    x = x
+
+let test : i32 = id 5
