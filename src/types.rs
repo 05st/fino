@@ -79,6 +79,23 @@ impl Type {
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        match self {
+            Type::Var(type_var) => write!(f, "{}", type_var),
+            Type::UniVar(uni_var) => write!(f, "{}", uni_var),
+            Type::Const(name) => write!(f, "{}", name),
+            Type::Fun(arg, ret) => write!(f, "{} -> {}", arg, ret)
+        }
+    }
+}
+
+impl Display for TypeVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Display for TypeUniVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "${}", self.0)
     }
 }

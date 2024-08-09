@@ -1,5 +1,5 @@
-fn factorial : u32 -> u32
-    x = if x then '1' else factorial x 420.69
+fn factorial : u32 -> i32
+    x = if false then 1 else factorial x 420.69
 
 fn add : u32 -> u32 -> u32
     a b = a

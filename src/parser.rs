@@ -138,7 +138,7 @@ impl<'a> Parser<'a> {
     // Skip newlines while ignoring ReachedEnd error from self.peek()
     fn skip_newlines(&mut self) {
         while let Ok(Token::Newline) = self.peek() {
-            self.next();
+            let _ = self.next();
         }
     }
 
@@ -212,11 +212,13 @@ impl<'a> Parser<'a> {
         self.expect(Token::KwElse)?;
         let fexpr = self.parse_expr()?;
 
-        Ok(Expr::If {
+        Ok(Expr {
             node_id: self.cache_location(if_span),
-            cond: Box::new(cond),
-            texpr: Box::new(texpr),
-            fexpr: Box::new(fexpr),
+            kind: ExprKind::If {
+                cond: Box::new(cond),
+                texpr: Box::new(texpr),
+                fexpr: Box::new(fexpr),
+            },
         })
     }
 
@@ -241,41 +243,55 @@ impl<'a> Parser<'a> {
                     Name::Unqualified(ident)
                 };
 
-                Ok(Expr::Var {
+                Ok(Expr {
                     node_id: self.cache_location(span),
-                    def_id: DefId(0),
-                    name: name,
+                    kind: ExprKind::Var {
+                        def_id: DefId(0),
+                        name: name,
+                    }
                 })
             }
 
-            Token::LitBool(b) => Ok(Expr::Lit {
+            Token::LitBool(b) => Ok(Expr {
                 node_id: self.cache_location(span),
-                literal: Lit::Bool(b),
+                kind: ExprKind::Lit {
+                    literal: Lit::Bool(b),
+                },
             }),
 
-            Token::LitDecimal(n) => Ok(Expr::Lit {
+            Token::LitDecimal(n) => Ok(Expr {
                 node_id: self.cache_location(span),
-                literal: Lit::Int(n),
+                kind: ExprKind::Lit {
+                    literal: Lit::Int(n),
+                },
             }),
 
-            Token::LitFloat(x) => Ok(Expr::Lit {
+            Token::LitFloat(x) => Ok(Expr {
                 node_id: self.cache_location(span),
-                literal: Lit::Float(x),
+                kind: ExprKind::Lit {
+                    literal: Lit::Float(x),
+                },
             }),
 
-            Token::LitString(s) => Ok(Expr::Lit {
+            Token::LitString(s) => Ok(Expr {
                 node_id: self.cache_location(span),
-                literal: Lit::String(s),
+                kind: ExprKind::Lit {
+                    literal: Lit::String(s),
+                },
             }),
 
-            Token::LitChar(c) => Ok(Expr::Lit {
+            Token::LitChar(c) => Ok(Expr {
                 node_id: self.cache_location(span),
-                literal: Lit::Char(c),
+                kind: ExprKind::Lit {
+                    literal: Lit::Char(c),
+                },
             }),
 
-            Token::ClosedParens => Ok(Expr::Lit {
+            Token::ClosedParens => Ok(Expr {
                 node_id: self.cache_location(span),
-                literal: Lit::Unit,
+                kind: ExprKind::Lit {
+                    literal: Lit::Unit,
+                },
             }),
 
             _ => self.error(expected_one_of!("identifier", "literal", "'('"), span),
@@ -291,10 +307,12 @@ impl<'a> Parser<'a> {
         // afterwards.
         let mut arg_span = self.span()?;
         while let Ok(arg_expr) = self.parse_atom() {
-            result = Expr::App {
+            result = Expr {
                 node_id: self.cache_location(arg_span),
-                fun: Box::new(result),
-                arg: Box::new(arg_expr),
+                kind: ExprKind::App {
+                    fun: Box::new(result),
+                    arg: Box::new(arg_expr),
+                },
             };
             arg_span = self.span()?;
         }
@@ -346,12 +364,16 @@ impl<'a> Parser<'a> {
         // Desugar function into definition with curried lambdas
         let lambda = params
             .into_iter()
-            .fold(body, |child, (param_name, span)| Expr::Lam {
-                node_id: self.cache_location(span),
-                param_def_id: DefId(0),
-                param: param_name,
-                body: Box::new(child),
-        });
+            .fold(body, |child, (param_name, span)| {
+                Expr {
+                    node_id: self.cache_location(span),
+                    kind: ExprKind::Lam {
+                        param_def_id: DefId(0),
+                        param: param_name,
+                        body: Box::new(child),
+                    },
+                }
+            });
 
         Ok(Item {
             node_id: self.cache_location(span),

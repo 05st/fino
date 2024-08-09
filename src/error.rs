@@ -24,17 +24,17 @@ pub enum ErrorKind {
 
     // Type inference errors
     TypeMismatch(Type, Type),
-    InfiniteType,
+    InfiniteType(Type)
 }
 
 pub struct Error {
-    error: ErrorKind,
+    kind: ErrorKind,
     location: Location,
 }
 
 impl Error {
-    pub fn new(error: ErrorKind, location: Location) -> Error {
-        Error { error, location }
+    pub fn new(kind: ErrorKind, location: Location) -> Error {
+        Error { kind, location }
     }
 
     pub fn report(&self) {
@@ -44,7 +44,7 @@ impl Error {
         let filename = self.location.filepath.to_string_lossy().into_owned();
 
         Report::build(ReportKind::Error, &filename, self.location.span.start)
-            .with_message(self.error.to_string())
+            .with_message(self.kind.to_string())
             .with_label(Label::new((&filename, self.location.span.clone())).with_color(Color::Red))
             .finish()
             .eprint((&filename, Source::from(source)))
@@ -80,7 +80,7 @@ impl Display for ErrorKind {
             Redefinition(qual) => write!(f, "{} is already defined", qual.join("::")),
 
             TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
-            InfiniteType => write!(f, "Attempt to construct infinite type here"),
+            InfiniteType(t) => write!(f, "Attempt to construct infinite type {} here", t),
         }
     }
 }

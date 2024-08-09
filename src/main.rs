@@ -5,19 +5,20 @@ use std::{
 use cache::CompilerCache;
 use clap::Parser as _;
 use error::Error;
+use typecheck::TypeChecker;
 use modulesort::toposort_modules;
 use parser::Parser;
-use resolution::NameResolution;
+use resolver::NameResolver;
 use walkdir::{DirEntry, WalkDir};
 
 mod ast;
 mod cache;
 mod error;
-mod inference;
+mod typecheck;
 mod lexer;
 mod modulesort;
 mod parser;
-mod resolution;
+mod resolver;
 mod types;
 
 const FINO_FILE_EXTENSION: &str = ".fn";
@@ -78,8 +79,11 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
 
     program = toposort_modules(&mut compiler_cache, program)?;
 
-    let mut resolution = NameResolution::new(&mut compiler_cache);
+    let mut resolution = NameResolver::new(&mut compiler_cache);
     resolution.resolve(&mut program)?;
+
+    let mut inference = TypeChecker::new(&mut compiler_cache);
+    inference.typecheck_modules(&program)?;
 
     println!("{:?}", program);
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::once, rc::Rc};
+use std::{collections::HashMap, iter::once};
 
 use crate::{
     ast::*,
@@ -6,7 +6,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-pub struct NameResolution<'a> {
+pub struct NameResolver<'a> {
     compiler_cache: &'a mut CompilerCache,
     // Only top-level functions definitions are stored in qualified_name_map
     qualified_name_map: HashMap<Vec<String>, DefId>,
@@ -15,9 +15,9 @@ pub struct NameResolution<'a> {
     current_module_imports: Option<Vec<Import>>,
 }
 
-impl<'a> NameResolution<'a> {
-    pub fn new(compiler_cache: &'a mut CompilerCache) -> NameResolution<'a> {
-        NameResolution {
+impl<'a> NameResolver<'a> {
+    pub fn new(compiler_cache: &'a mut CompilerCache) -> NameResolver<'a> {
+        NameResolver {
             compiler_cache,
             qualified_name_map: HashMap::new(),
             def_id_count: 0,
@@ -82,31 +82,27 @@ impl<'a> NameResolution<'a> {
     }
 
     fn resolve_expr(&mut self, expr: &mut Expr, scope: im::HashMap<String, DefId>) -> Result<(), Error> {
-        match expr {
-            Expr::Lit { node_id, literal } => Ok(()),
-            Expr::Var { node_id, ref mut def_id, name } => {
-                *def_id = self.lookup_name(name, scope, node_id)?;
+        match &mut expr.kind {
+            ExprKind::Lit { literal: _ } => Ok(()),
+            ExprKind::Var { ref mut def_id, name } => {
+                *def_id = self.lookup_name(&name, scope, &expr.node_id)?;
                 Ok(())
             }
-            Expr::App { node_id, ref mut fun, ref mut arg } => {
+            ExprKind::App { ref mut fun, ref mut arg } => {
                 self.resolve_expr(fun, scope.clone())?;
                 self.resolve_expr(arg, scope)
             }
-            Expr::Lam { node_id, ref mut param_def_id, param, body } => {
+            ExprKind::Lam { ref mut param_def_id, param, body } => {
                 *param_def_id = self.new_def_id();
                 let new_scope = scope.update(param.clone(), param_def_id.clone());
                 self.resolve_expr(body, new_scope)
             }
-            Expr::If { node_id, ref mut cond, ref mut texpr, ref mut fexpr } => {
+            ExprKind::If { ref mut cond, ref mut texpr, ref mut fexpr } => {
                 self.resolve_expr(cond, scope.clone())?;
                 self.resolve_expr(texpr, scope.clone())?;
                 self.resolve_expr(fexpr, scope)
             }
         }
-    }
-
-    fn resolve_item(&mut self, item: &mut Item, scope: im::HashMap<String, DefId>) -> Result<(), Error> {
-        self.resolve_expr(&mut item.expr, scope)
     }
 
     fn resolve_module(&mut self, module: &'a mut Module) -> Result<(), Error> {
@@ -124,8 +120,8 @@ impl<'a> NameResolution<'a> {
         }
         
         // Resolve items, note each resolve_item() call starts with an empty scope.
-        for mut item in module.items.iter_mut() {
-            self.resolve_item(&mut item, im::HashMap::new())?;
+        for item in module.items.iter_mut() {
+            self.resolve_expr(&mut item.expr, im::HashMap::new())?;
         }
 
         Ok(())
