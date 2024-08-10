@@ -1,4 +1,4 @@
-use std::{collections::{BTreeSet, VecDeque}, ops::Range, path::PathBuf};
+use std::{borrow::BorrowMut, collections::{BTreeSet, VecDeque}, ops::Range, path::PathBuf};
 
 use crate::{
     ast::*,
@@ -20,12 +20,15 @@ pub struct Parser<'a> {
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
 // without having to type String::from(...).
 macro_rules! expected_one_of {
-    ( $( $x:literal ),+ ) => {
-        ErrorKind::ExpectedOneOf(vec![
+    ( $t:expr, $( $x:literal ),+ ) => {
+        ErrorKind::ExpectedOneOf(
+            $t,
+            vec![
             $(
                 String::from($x),
             )+
-        ])
+            ]
+        )
     };
 }
 
@@ -74,65 +77,72 @@ impl<'a> Parser<'a> {
         Err(self.make_error(error, span))
     }
 
-    // The next few functions can throw a ReachedEnd error which is supposed to have
-    // no location info associated with it (other than a filepath), we pass a
-    // Range(0, 0), but it is important to be careful of what is shown to the user.
+    // Make span for eof token by using the end point of the span of the previous token
+    fn make_eof_span(&self) -> Span {
+        // If self.previous was None, then the input was empty, so we can return an
+        // empty span at 0 bytes.
+        self.previous
+            .as_ref()
+            .map(|p| Range { start: p.1.end, end: p.1.end })
+            .unwrap_or(Range { start: 0, end: 0 })
+    }
 
     // Advance token stream and return popped (token, span)
-    fn next_with_span(&mut self) -> Result<(Token, Span), Error> {
+    fn next_with_span(&mut self) -> (Token, Span) {
         let result = self
+            .borrow_mut()
             .tokens
             .pop_front()
-            .ok_or(self.make_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))?;
+            .unwrap_or((Token::Eof, self.make_eof_span()));
 
         self.previous = Some(result.clone());
-        Ok(result)
+        result
     }
 
     // Advance token stream and return popped token
-    fn next(&mut self) -> Result<Token, Error> {
-        self.next_with_span().map(|res| res.0)
+    fn next(&mut self) -> Token {
+        self.next_with_span().0
     }
 
     // Peek current token
-    fn peek(&mut self) -> Result<&Token, Error> {
+    fn peek(&mut self) -> &Token {
         self.tokens
             .front()
             .map(|t| &t.0)
-            .ok_or(self.make_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))
+            .unwrap_or(&Token::Eof)
     }
 
     // Span of current token
-    fn span(&mut self) -> Result<Span, Error> {
+    fn span(&self) -> Span {
         self.tokens
             .front()
             .map(|t| t.1.clone())
-            .ok_or(self.make_error(ErrorKind::ReachedEnd, Range { start: 0, end: 0 }))
+            .unwrap_or(self.make_eof_span())
     }
 
-    // Consume specific token variant
+    // Consume specific token
     fn expect(&mut self, expected: Token) -> Result<Token, Error> {
-        let (current, span) = self.next_with_span()?;
+        let (current, span) = self.next_with_span();
 
-        if std::mem::discriminant(&current) == std::mem::discriminant(&expected) {
+        if current == expected {
             Ok(current)
         } else {
-            self.error(ErrorKind::ExpectedOneOf(vec![expected.to_string()]), span)
+            self.error(ErrorKind::ExpectedOneOf(current, vec![expected.to_string()]), span)
         }
     }
 
     // Consume any identifier
     fn expect_identifier(&mut self) -> Result<String, Error> {
-        match self.next_with_span()? {
+        match self.next_with_span() {
             (Token::LowerIdentifier(ident) | Token::UpperIdentifier(ident), _) => Ok(ident),
-            (_, span) => self.error(expected_one_of!("identifier"), span),
+            (other, span) => self.error(expected_one_of!(other, "identifier"), span),
         }
     }
 
-    // Skip newlines while ignoring ReachedEnd error from self.peek()
+    // Skip zero or more newlines
     fn skip_newlines(&mut self) {
-        while let Ok(Token::Newline) = self.peek() {
-            let _ = self.next();
+        while let Token::Newline = self.peek() {
+            self.next();
         }
     }
 
@@ -140,8 +150,8 @@ impl<'a> Parser<'a> {
         let mut result = Vec::new();
         loop {
             result.push(self.expect_identifier()?);
-            match self.peek()? {
-                Token::Dot => self.next()?,
+            match self.peek() {
+                Token::Dot => self.next(),
                 _ => break,
             };
         }
@@ -160,7 +170,7 @@ impl<'a> Parser<'a> {
 
     // Parse type constant or type variable
     fn parse_base_type(&mut self) -> Result<Type, Error> {
-        let (token, span) = self.next_with_span()?;
+        let (token, span) = self.next_with_span();
 
         match token {
             Token::KwUnit => Ok(Type::unit()),
@@ -177,7 +187,7 @@ impl<'a> Parser<'a> {
             Token::UpperIdentifier(type_name) => Ok(Type::Const(type_name)),
             Token::LowerIdentifier(type_var) => Ok(Type::Var(TypeVar(type_var))),
 
-            _ => self.error(expected_one_of!("type", "type variable"), span),
+            other => self.error(expected_one_of!(other, "type", "type variable"), span),
         }
     }
 
@@ -185,9 +195,9 @@ impl<'a> Parser<'a> {
     fn parse_type(&mut self) -> Result<Type, Error> {
         let base_type = self.parse_base_type()?;
 
-        match self.peek()? {
+        match self.peek() {
             Token::SmallArrow => {
-                self.next()?;
+                self.next();
                 Ok(Type::Fun(Box::new(base_type), Box::new(self.parse_type()?)))
             }
             _ => Ok(base_type),
@@ -195,7 +205,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_let_expr(&mut self) -> Result<Expr, Error> {
-        let let_span = self.span()?;
+        let let_span = self.span();
         self.expect(Token::KwLet)?;
 
         let name = self.expect_identifier()?;
@@ -218,7 +228,7 @@ impl<'a> Parser<'a> {
 
     // Parse if expression
     fn parse_if_expr(&mut self) -> Result<Expr, Error> {
-        let if_span = self.span()?;
+        let if_span = self.span();
         self.expect(Token::KwIf)?;
         let cond = self.parse_expr()?;
 
@@ -240,7 +250,7 @@ impl<'a> Parser<'a> {
 
     // Parse expression atom (i.e. literal, variable, parenthesized expression)
     fn parse_atom(&mut self) -> Result<Expr, Error> {
-        let (token, span) = self.next_with_span()?;
+        let (token, span) = self.next_with_span();
         match token {
             // Parse parenthesized expression
             Token::LeftParen => {
@@ -251,7 +261,7 @@ impl<'a> Parser<'a> {
 
             Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => {
                 // Parse qualified name if we see '::' token
-                let name = if let Token::Dot = self.peek()? {
+                let name = if let Token::Dot = self.peek() {
                     // Restore identifier token for parse_name()
                     self.restore();
                     self.parse_name()?
@@ -310,7 +320,7 @@ impl<'a> Parser<'a> {
                 },
             }),
 
-            _ => self.error(expected_one_of!("identifier", "literal", "'('"), span),
+            other => self.error(expected_one_of!(other, "identifier", "literal", "'('"), span),
         }
     }
 
@@ -322,11 +332,11 @@ impl<'a> Parser<'a> {
         // to match the first token of the atom. Otherwise, if the first token matches
         // as an atom, we should go through with parsing the atom and report any
         // failure. Find better way to do this.
-        let mut next_tmp = self.peek()?.clone();
+        let mut next_tmp = self.peek().clone();
 
         // Need to get span for possible arg expr before parse_atom() is called because
         // it consumes the token, so we can't get the span afterwards.
-        let mut arg_span = self.span()?;
+        let mut arg_span = self.span();
         let mut arg_result = self.parse_atom();
 
         while arg_result.is_ok() {
@@ -338,8 +348,8 @@ impl<'a> Parser<'a> {
                 },
             };
 
-            arg_span = self.span()?;
-            next_tmp = self.peek()?.clone();
+            arg_span = self.span();
+            next_tmp = self.peek().clone();
             arg_result = self.parse_atom();
         }
 
@@ -348,19 +358,24 @@ impl<'a> Parser<'a> {
         // If restored token doesn't match next token after attempting parse_atom(),
         // then it matched the first token of an atom, so we should go through with it
         // and report the failure.
-        if *self.peek()? != next_tmp {
+        if *self.peek() != next_tmp {
             Err(arg_result.unwrap_err())
         } else {
             Ok(result)
         }
     }
 
+    // Parse operators with a pratt parser
+    fn parse_oper_expr(&mut self, min_prec: u8) -> Result<Expr, Error> {
+        self.parse_app()
+    }
+
     // Parse expression
     fn parse_expr(&mut self) -> Result<Expr, Error> {
-        match self.peek()? {
+        match self.peek() {
             Token::KwLet => self.parse_let_expr(),
             Token::KwIf => self.parse_if_expr(),
-            _ => self.parse_app(),
+            _ => self.parse_oper_expr(0),
         }
     }
 
@@ -368,7 +383,7 @@ impl<'a> Parser<'a> {
     fn parse_fn_item(&mut self) -> Result<Item, Error> {
         self.expect(Token::KwFn)?;
 
-        let span = self.span()?;
+        let span = self.span();
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
@@ -384,13 +399,13 @@ impl<'a> Parser<'a> {
 
         let mut params = Vec::new();
         loop {
-            let (token, span) = self.next_with_span()?;
+            let (token, span) = self.next_with_span();
             match token {
                 Token::UpperIdentifier(param) | Token::LowerIdentifier(param) => {
                     params.push((param, span))
                 }
                 Token::Equal => break,
-                _ => return self.error(expected_one_of!("identifier", "'='"), span),
+                other => return self.error(expected_one_of!(other, "identifier", "'='"), span),
             }
         }
 
@@ -425,7 +440,7 @@ impl<'a> Parser<'a> {
     fn parse_let_item(&mut self) -> Result<Item, Error> {
         self.expect(Token::KwLet)?;
 
-        let span = self.span()?;
+        let span = self.span();
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
@@ -449,7 +464,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_import(&mut self) -> Result<Import, Error> {
-        let span = self.span()?;
+        let span = self.span();
         self.expect(Token::KwImport)?;
 
         let module_name = self.parse_separated_name()?;
@@ -462,11 +477,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_export(&mut self) -> Result<Export, Error> {
-        let span = self.span()?;
+        let span = self.span();
         self.expect(Token::KwExport)?;
 
-        let export = if let Token::KwModule = self.peek()? {
-            self.next()?;
+        let export = if let Token::KwModule = self.peek() {
+            self.next();
 
             Export::Module {
                 node_id: self.cache_location(span),
@@ -522,16 +537,16 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
 
             if !self.tokens.is_empty() {
-                match self.peek()? {
+                match self.peek() {
                     Token::KwImport => imports.push(self.parse_import()?),
                     Token::KwExport => exports.push(self.parse_export()?),
                     Token::KwFn => items.push(self.parse_fn_item()?),
                     Token::KwLet => items.push(self.parse_let_item()?),
 
                     _ => {
-                        let span = self.span()?;
+                        let (token, span) = self.next_with_span();
                         return self.error(
-                            expected_one_of!("'import'", "'export'", "top-level definition"),
+                            expected_one_of!(token, "'import'", "'export'", "top-level definition"),
                             span,
                         );
                     }

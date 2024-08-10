@@ -5,14 +5,14 @@ use ariadne::{Color, Label, Report, ReportKind, Source};
 
 use crate::ast::Name;
 use crate::cache::Location;
+use crate::lexer::Token;
 use crate::types::Type;
 
 #[derive(Debug)]
 pub enum ErrorKind {
     // Parser errors
-    ReachedEnd,
     UnknownToken,
-    ExpectedOneOf(Vec<String>),
+    ExpectedOneOf(Token, Vec<String>),
     UnexpectedIndent(usize),
 
     // Module sort errors
@@ -59,13 +59,12 @@ impl Display for ErrorKind {
         use ErrorKind::*;
 
         match self {
-            ReachedEnd => write!(f, "Reached end of input"),
             UnknownToken => write!(f, "Encountered unknown token here"),
-            ExpectedOneOf(items) => {
-                if items.len() == 1 {
-                    write!(f, "Expected {} here", items[0])
+            ExpectedOneOf(got, allowed) => {
+                if allowed.len() == 1 {
+                    write!(f, "Expected {} here, got {}", allowed[0], got)
                 } else {
-                    write!(f, "Expected one of {} here", items.join(", "))
+                    write!(f, "Expected one of {} here, got {}", allowed.join(", "), got)
                 }
             }
             UnexpectedIndent(size) => write!(f, "Unexpected indent of size {} here", size),
@@ -74,10 +73,10 @@ impl Display for ErrorKind {
             UnknownModule => write!(f, "Could not find module"),
 
             UnknownVariable(name) => match name {
-                Name::Qualified(qual) => write!(f, "Unknown variable {}", qual.join("::")),
+                Name::Qualified(qual) => write!(f, "Unknown variable {}", qual.join(".")),
                 Name::Unqualified(ident) => write!(f, "Unknown variable {}", ident),
             },
-            Redefinition(qual) => write!(f, "{} is already defined", qual.join("::")),
+            Redefinition(qual) => write!(f, "{} is already defined", qual.join(".")),
 
             TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
             InfiniteType(t) => write!(f, "Attempt to construct infinite type {} here", t),

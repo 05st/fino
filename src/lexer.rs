@@ -117,6 +117,9 @@ pub enum Token {
 
     #[regex(r"[ \t]+", skip)]
     Space,
+
+    // Created by parser only
+    Eof,
 }
 
 fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
@@ -198,6 +201,7 @@ impl Display for Token {
             Token::Dedent => write!(f, "de-indentation"),
             Token::Newline => write!(f, "newline"),
             Token::Space => write!(f, "space"),
+            Token::Eof => write!(f, "end of file"),
         }
     }
 }
