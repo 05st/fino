@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, collections::{BTreeSet, VecDeque}, ops::Range, path::PathBuf};
+use std::{borrow::BorrowMut, collections::{BTreeSet, HashMap, VecDeque}, ops::Range, path::PathBuf};
 
 use crate::{
     ast::*,
@@ -11,10 +11,16 @@ use logos::{Logos, Span};
 
 pub struct Parser<'a> {
     compiler_cache: &'a mut CompilerCache,
+
     node_id_count: usize,
     tokens: VecDeque<(Token, Span)>,
     filepath: PathBuf,
     previous: Option<(Token, Span)>,
+
+    // Maps for operator precedences
+    prefix_precs: HashMap<String, u8>,
+    infix_precs: HashMap<String, (u8, u8)>,
+    postfix_precs: HashMap<String, u8>,
 }
 
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
@@ -40,6 +46,9 @@ impl<'a> Parser<'a> {
             tokens: VecDeque::new(),
             filepath: PathBuf::new(),
             previous: None,
+            prefix_precs: HashMap::new(),
+            infix_precs: HashMap::new(),
+            postfix_precs: HashMap::new(),
         }
     }
 
@@ -105,7 +114,7 @@ impl<'a> Parser<'a> {
     }
 
     // Peek current token
-    fn peek(&mut self) -> &Token {
+    fn peek(&self) -> &Token {
         self.tokens
             .front()
             .map(|t| &t.0)
@@ -249,13 +258,17 @@ impl<'a> Parser<'a> {
     }
 
     // Parse expression atom (i.e. literal, variable, parenthesized expression)
-    fn parse_atom(&mut self) -> Result<Expr, Error> {
+    // The error type contains a bool which is true if zero tokens were matched
+    // which is useful for parse_app() to know if it should go through and 
+    // report the error (if more than zero were matched) or ignore it (if zero
+    // were matched).
+    fn parse_atom(&mut self) -> Result<Expr, (bool, Error)> {
         let (token, span) = self.next_with_span();
         match token {
             // Parse parenthesized expression
             Token::LeftParen => {
-                let expr = self.parse_expr()?;
-                self.expect(Token::RightParen)?;
+                let expr = self.parse_expr().map_err(|e| (false, e))?;
+                self.expect(Token::RightParen).map_err(|e| (false, e))?;
                 Ok(expr)
             }
 
@@ -264,7 +277,7 @@ impl<'a> Parser<'a> {
                 let name = if let Token::Dot = self.peek() {
                     // Restore identifier token for parse_name()
                     self.restore();
-                    self.parse_name()?
+                    self.parse_name().map_err(|e| (false, e))?
                 } else {
                     Name::Unqualified(ident)
                 };
@@ -320,54 +333,137 @@ impl<'a> Parser<'a> {
                 },
             }),
 
-            other => self.error(expected_one_of!(other, "identifier", "literal", "'('"), span),
+            other => Err((true, self.make_error(expected_one_of!(other, "identifier", "literal", "'('"), span)))
         }
     }
 
     // Parse function application
     fn parse_app(&mut self) -> Result<Expr, Error> {
-        let mut result = self.parse_atom()?;
-
-        // This is such a hack. We only discard the error from parse_atom() if it fails
-        // to match the first token of the atom. Otherwise, if the first token matches
-        // as an atom, we should go through with parsing the atom and report any
-        // failure. Find better way to do this.
-        let mut next_tmp = self.peek().clone();
-
-        // Need to get span for possible arg expr before parse_atom() is called because
-        // it consumes the token, so we can't get the span afterwards.
-        let mut arg_span = self.span();
-        let mut arg_result = self.parse_atom();
-
-        while arg_result.is_ok() {
-            result = Expr {
-                node_id: self.cache_location(arg_span),
-                kind: ExprKind::App {
-                    fun: Box::new(result),
-                    arg: Box::new(arg_result.unwrap()),
-                },
-            };
-
-            arg_span = self.span();
-            next_tmp = self.peek().clone();
-            arg_result = self.parse_atom();
+        let mut result = self.parse_atom().map_err(|atom_err| atom_err.1)?;
+        
+        loop {
+            // Need to get span for possible arg expr before parse_atom() is called because
+            // it consumes the token, so we can't get the span afterwards.
+            let arg_span = self.span();
+            match self.parse_atom() {
+                Ok(arg_expr) => {
+                    result = Expr {
+                        node_id: self.cache_location(arg_span),
+                        kind: ExprKind::App {
+                            fun: Box::new(result),
+                            arg: Box::new(arg_expr),
+                        }
+                    };
+                }
+                Err((false, err)) => return Err(err),
+                // When parsing atom fails without matching any token, restore token consumed
+                // by parse_atom()
+                Err((true, _)) => {
+                    self.restore();
+                    break;
+                }
+            }
         }
 
-        // When parsing atom fails, restore token consumed by parse_atom()
-        self.restore();
-        // If restored token doesn't match next token after attempting parse_atom(),
-        // then it matched the first token of an atom, so we should go through with it
-        // and report the failure.
-        if *self.peek() != next_tmp {
-            Err(arg_result.unwrap_err())
-        } else {
-            Ok(result)
+        Ok(result)
+    }
+
+    // Desugar unary operator application
+    fn unary_oper(oper: String, node_id: NodeId, expr: Expr) -> Expr {
+        Expr {
+            node_id: node_id.clone(),
+            kind: ExprKind::App {
+                fun: Box::new(Expr {
+                    node_id,
+                    kind: ExprKind::Var {
+                        def_id: DefId(0),
+                        name: Name::Unqualified(oper),
+                    },
+                }),
+                arg: Box::new(expr),
+            }
+        }
+    }
+
+    // Desugar binary operator application
+    fn binary_oper(oper: String, node_id: NodeId, left: Expr, right: Expr) -> Expr {
+        Expr {
+            node_id: node_id.clone(),
+            kind: ExprKind::App {
+                fun: Box::new(Expr {
+                    node_id: node_id.clone(),
+                    kind: ExprKind::App {
+                        fun: Box::new(Expr {
+                            node_id,
+                            kind: ExprKind::Var {
+                                def_id: DefId(0),
+                                name: Name::Unqualified(oper),
+                            },
+                        }),
+                        arg: Box::new(left),
+                    },
+                }),
+                arg: Box::new(right),
+            },
         }
     }
 
     // Parse operators with a pratt parser
     fn parse_oper_expr(&mut self, min_prec: u8) -> Result<Expr, Error> {
-        self.parse_app()
+        let mut lhs = match self.peek() {
+            Token::Operator(oper) => {
+                if let Some(right_prec) = self.prefix_precs.get(oper) {
+                    let oper = oper.clone();
+                    let expr = self.parse_oper_expr(*right_prec)?;
+                    Parser::unary_oper(
+                        oper,
+                        self.cache_location(self.span()),
+                        expr,
+                    )
+                } else {
+                    panic!("got non-prefix operator");
+                }
+            }
+            _ => self.parse_app()?,
+        };
+
+        loop {
+            let oper = match self.peek() {
+                // Don't really need to clone here
+                Token::Operator(oper) => oper.clone(),
+                Token::SpacedDot => String::from("."),
+                _ => break,
+            };
+
+            if let Some(left_prec) = self.postfix_precs.get(&oper) {
+                if *left_prec < min_prec {
+                    break;
+                }
+                let (_, span) = self.next_with_span();
+                // Desugar unary operator
+                lhs = Parser::unary_oper(oper, self.cache_location(span), lhs);
+                continue;
+            }
+
+            if let Some((left_prec, right_prec)) = self.infix_precs.get(&oper).copied() {
+                if left_prec < min_prec {
+                    break;
+                }
+                let (_, span) = self.next_with_span();
+                // Desugar binary operator
+                lhs = Parser::binary_oper(
+                    oper,
+                    self.cache_location(span),
+                    lhs,
+                    self.parse_oper_expr(right_prec)?,
+                );
+                continue;
+            }
+
+            break;
+        }
+
+        Ok(lhs)
     }
 
     // Parse expression
