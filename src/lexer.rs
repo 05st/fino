@@ -87,13 +87,26 @@ pub enum Token {
     Bar,
     #[token(":")]
     Colon,
-    #[token("::")]
-    ColonColon,
-
     #[token("->")]
     SmallArrow,
     #[token("=>")]
     BigArrow,
+
+    // Used for indexing
+    #[token(".")]
+    Dot,
+    // Function composition
+    #[token(" .")]
+    SpacedDot,
+
+    // Priority is set lower for these three because the patterns can also match
+    // reserved keywords / operators.
+    #[regex(r"[\+\-*\/^!|<>=?$@#%:]+", priority = 1, callback = |lex| lex.slice().to_owned())]
+    Operator(String),
+    #[regex(r"[A-Z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
+    UpperIdentifier(String),
+    #[regex(r"[a-z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
+    LowerIdentifier(String),
 
     // The indent token also consumes a newline to distinguish it from whitespace
     // which is skipped by the Space token.
@@ -104,15 +117,6 @@ pub enum Token {
 
     #[regex(r"[ \t]+", skip)]
     Space,
-
-    // Priority is set lower for these three because the patterns can also match
-    // reserved keywords / operators.
-    #[regex(r"[\+\-*\/^!|<>=.?$@#%:]+", priority = 1, callback = |lex| lex.slice().to_owned())]
-    Operator(String),
-    #[regex(r"[A-Z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
-    UpperIdentifier(String),
-    #[regex(r"[a-z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
-    LowerIdentifier(String),
 }
 
 fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
@@ -177,22 +181,23 @@ impl Display for Token {
             Token::LitFloat(_) => write!(f, "float"),
             Token::LitBool(_) => write!(f, "boolean"),
             Token::LitChar(_) => write!(f, "character"),
-            Token::LitUnit => write!(f, "()"),
-            Token::LeftParen => write!(f, "("),
-            Token::RightParen => write!(f, ")"),
-            Token::Equal => write!(f, "="),
-            Token::Bar => write!(f, "|"),
-            Token::Colon => write!(f, ":"),
-            Token::ColonColon => write!(f, "::"),
-            Token::SmallArrow => write!(f, "->"),
-            Token::BigArrow => write!(f, "=>"),
+            Token::LitUnit => write!(f, "'()'"),
+            Token::LeftParen => write!(f, "'('"),
+            Token::RightParen => write!(f, "')'"),
+            Token::Equal => write!(f, "'='"),
+            Token::Bar => write!(f, "'|'"),
+            Token::Colon => write!(f, "':'"),
+            Token::SmallArrow => write!(f, "'->'"),
+            Token::BigArrow => write!(f, "'=>'"),
+            Token::Dot => write!(f, "'.'"),
+            Token::SpacedDot => write!(f, "' .'"),
+            Token::Operator(_) => write!(f, "operator"),
+            Token::UpperIdentifier(_) => write!(f, "uppercase identifier"),
+            Token::LowerIdentifier(_) => write!(f, "lowercase identifier"),
             Token::Indent => write!(f, "indentation"),
             Token::Dedent => write!(f, "de-indentation"),
             Token::Newline => write!(f, "newline"),
             Token::Space => write!(f, "space"),
-            Token::Operator(_) => write!(f, "operator"),
-            Token::UpperIdentifier(_) => write!(f, "uppercase identifier"),
-            Token::LowerIdentifier(_) => write!(f, "lowercase identifier"),
         }
     }
 }

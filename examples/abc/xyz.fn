@@ -1,2 +1,2 @@
-import animals::dog
-import food::pizza
+import animals.dog
+import food.pizza

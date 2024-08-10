@@ -141,7 +141,7 @@ impl<'a> Parser<'a> {
         loop {
             result.push(self.expect_identifier()?);
             match self.peek()? {
-                Token::ColonColon => self.next()?,
+                Token::Dot => self.next()?,
                 _ => break,
             };
         }
@@ -251,7 +251,7 @@ impl<'a> Parser<'a> {
 
             Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => {
                 // Parse qualified name if we see '::' token
-                let name = if let Token::ColonColon = self.peek()? {
+                let name = if let Token::Dot = self.peek()? {
                     // Restore identifier token for parse_name()
                     self.restore();
                     self.parse_name()?

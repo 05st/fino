@@ -1,1 +1,1 @@
-import animals::cat
+import animals.cat

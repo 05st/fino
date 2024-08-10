@@ -1,1 +1,1 @@
-import food::fruits::pineapple
+import food.fruits.pineapple
