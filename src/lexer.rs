@@ -62,8 +62,8 @@ pub enum Token {
 
     #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| lex.slice().to_owned())]
     LitString(String),
-    #[regex(r"[0-9]+", |lex| lex.slice().parse::<u64>().unwrap())]
-    LitDecimal(u64),
+    #[regex(r"-?[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
+    LitInteger(i64),
     #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse::<f64>().unwrap())]
     LitFloat(f64),
     #[token("true", |_| true)]
@@ -180,7 +180,7 @@ impl Display for Token {
             Token::KwF32 => write!(f, "'f32'"),
             Token::KwF64 => write!(f, "'f64'"),
             Token::LitString(_) => write!(f, "string"),
-            Token::LitDecimal(_) => write!(f, "integer"),
+            Token::LitInteger(_) => write!(f, "integer"),
             Token::LitFloat(_) => write!(f, "float"),
             Token::LitBool(_) => write!(f, "boolean"),
             Token::LitChar(_) => write!(f, "character"),

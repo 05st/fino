@@ -298,7 +298,7 @@ impl<'a> Parser<'a> {
                 },
             }),
 
-            Token::LitDecimal(n) => Ok(Expr {
+            Token::LitInteger(n) => Ok(Expr {
                 node_id: self.cache_location(span),
                 kind: ExprKind::Lit {
                     literal: Lit::Int(n),

@@ -1,0 +1,19 @@
+infl + 2
+infl - 2
+infl * 3
+post ! 5
+
+fn (+) : u32 -> u32 -> u32
+    a b = runtime_add_u32 a b
+
+fn (-) : u32 -> u32 -> u32
+    a b = runtime_sub_u32 a b
+
+fn (*) : u32 -> u32 -> u32
+    a b = runtime_mul_u32 a b
+
+fn (!) : u32 -> u32
+    0 = 1
+    n = n * factorial (n - 1)
+
+let test : u32 = 10! + 42

@@ -17,7 +17,7 @@ pub enum Name {
 
 #[derive(Debug)]
 pub enum Lit {
-    Int(u64),
+    Int(i64),
     Float(f64),
     String(String),
     Char(char),
