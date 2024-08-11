@@ -70,8 +70,8 @@ pub struct Expr {
 #[derive(Debug)]
 pub struct Item {
     pub node_id: NodeId,
-    pub name: String,
     pub def_id: DefId,
+    pub name: String,
     pub scheme: TypeScheme,
     pub expr: Expr,
 }
@@ -98,9 +98,18 @@ pub enum Export {
 }
 
 #[derive(Debug)]
+pub struct Extern {
+    pub node_id: NodeId,
+    pub def_id: DefId,
+    pub name: String,
+    pub scheme: TypeScheme,
+}
+
+#[derive(Debug)]
 pub struct Module {
     pub module_name: Vec<String>,
-    pub items: Vec<Item>,
     pub imports: Vec<Import>,
     pub exports: Vec<Export>,
+    pub externs: Vec<Extern>,
+    pub items: Vec<Item>,
 }

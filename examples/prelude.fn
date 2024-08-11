@@ -1,9 +1,15 @@
-post ! 10
-
 fn id : a -> a
     x = x
 
-let (!) : i32 = 12
+post ! 10
+fn (!) : i32 -> i32
+    n = 1
+
+infl * 5
+extern mul_i32 : i32 -> i32 -> i32
+fn (*) : i32 -> i32 -> i32
+    a b = mul_i32 a b
 
 let test : i32 = let n = (5) in id (let n = n in id n)
-let abc : bool = let res = id prelude.id true in if res then res else false!
+let abc : bool = let res = id prelude.id true in if res then res else false
+let twenty : i32 = 2! * 10 * 2 * 42!

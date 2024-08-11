@@ -221,6 +221,13 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_type_scheme(&mut self) -> Result<TypeScheme, Error> {
+        let ty = self.parse_type()?;
+        let mut type_vars = BTreeSet::new();
+        ty.extract_type_vars(&mut type_vars);
+        Ok(TypeScheme(type_vars, ty))
+    }
+
     fn parse_let_expr(&mut self) -> Result<Expr, Error> {
         let let_span = self.span();
         self.expect(Token::KwLet)?;
@@ -445,16 +452,15 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
 
-            let (_, span) = self.next_with_span();
-
             let prec = self.operator_map
                 .get(&oper)
-                .ok_or(self.make_error(ErrorKind::UndeclaredOperator(oper.clone()), span.clone()))?;
+                .ok_or(self.make_error(ErrorKind::UndeclaredOperator(oper.clone()), self.span()))?;
 
             if let Precedence::Postfix(left_prec) = *prec {
                 if left_prec < min_prec {
                     break;
                 }
+                let (_, span) = self.next_with_span();
                 lhs = Parser::unary_oper(oper, self.cache_location(span), lhs);
                 continue;
             }
@@ -463,6 +469,7 @@ impl<'a> Parser<'a> {
                 if left_prec < min_prec {
                     break;
                 }
+                let (_, span) = self.next_with_span();
                 lhs = Parser::binary_oper(
                     oper,
                     self.cache_location(span),
@@ -495,10 +502,7 @@ impl<'a> Parser<'a> {
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
-
-        let type_ann = self.parse_type()?;
-        let mut type_vars = BTreeSet::new();
-        type_ann.extract_type_vars(&mut type_vars);
+        let scheme = self.parse_type_scheme()?;
 
         self.expect(Token::Indent)?;
 
@@ -539,7 +543,7 @@ impl<'a> Parser<'a> {
             node_id: self.cache_location(span),
             name,
             def_id: DefId(0),
-            scheme: TypeScheme(type_vars, type_ann),
+            scheme,
             expr,
         })
     }
@@ -552,10 +556,7 @@ impl<'a> Parser<'a> {
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
-
-        let type_ann = self.parse_type()?;
-        let mut type_vars = BTreeSet::new();
-        type_ann.extract_type_vars(&mut type_vars);
+        let scheme = self.parse_type_scheme()?;
 
         self.expect(Token::Equal)?;
         let expr = self.parse_expr()?;
@@ -566,7 +567,7 @@ impl<'a> Parser<'a> {
             node_id: self.cache_location(span),
             name,
             def_id: DefId(0),
-            scheme: TypeScheme(type_vars, type_ann),
+            scheme,
             expr,
         })
     }
@@ -608,10 +609,29 @@ impl<'a> Parser<'a> {
         Ok(export)
     }
 
+    fn parse_extern(&mut self) -> Result<Extern, Error> {
+        let span = self.span();
+        self.expect(Token::KwExtern)?;
+        let name = self.expect_identifier()?;
+
+        self.expect(Token::Colon)?;
+        let scheme = self.parse_type_scheme()?;
+
+        self.expect(Token::Newline)?;
+
+        Ok(Extern {
+            node_id: self.cache_location(span),
+            def_id: DefId(0),
+            name,
+            scheme,
+        })
+    }
+
     pub fn parse_module(&mut self, tokens: Vec<(Token, Span)>, module_name: Vec<String>, filepath: PathBuf) -> Result<Module, Error> {
         self.tokens = VecDeque::from(tokens);
         self.filepath = filepath;
 
+        let mut externs = Vec::new();
         let mut imports = Vec::new();
         let mut exports = Vec::new();
         let mut items = Vec::new();
@@ -621,6 +641,7 @@ impl<'a> Parser<'a> {
 
             if !self.tokens.is_empty() {
                 match self.peek() {
+                    Token::KwExtern => externs.push(self.parse_extern()?),
                     Token::KwImport => imports.push(self.parse_import()?),
                     Token::KwExport => exports.push(self.parse_export()?),
                     Token::KwFn => items.push(self.parse_fn_item()?),
@@ -641,9 +662,10 @@ impl<'a> Parser<'a> {
 
         Ok(Module {
             module_name,
-            items,
+            externs,
             imports,
             exports,
+            items,
         })
     }
 }

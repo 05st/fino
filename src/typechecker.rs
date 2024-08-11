@@ -245,6 +245,9 @@ pub fn typecheck_program(compiler_cache: &mut CompilerCache, program: &Vec<Modul
 
     for module in program {
         // Insert all top-level definitions into item_scheme_map
+        for ext in &module.externs {
+            typechecker.item_scheme_map.insert(ext.def_id.clone(), ext.scheme.clone());
+        }
         for item in &module.items {
             typechecker.item_scheme_map.insert(item.def_id.clone(), item.scheme.clone());
         }

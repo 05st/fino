@@ -119,17 +119,31 @@ impl<'a> NameResolver<'a> {
         self.current_module_name = Some(module.module_name.clone());
         self.current_module_imports = Some(module.imports.clone());
 
-        // Insert top-level definitions to qualifed_name_map
-        for item in &mut module.items {
+        let get_qualified_name = |name| {
             let mut qualified_name = module.module_name.clone();
-            qualified_name.push(item.name.clone());
+            qualified_name.push(name);
+            qualified_name
+        };
 
-            let def_id = self.new_def_id();
-            self.insert_qualified_name(qualified_name, def_id.clone(), &item.node_id)?;
-            item.def_id = def_id;
+        // Insert top-level definitions to qualified_name_map
+        for ext in &mut module.externs {
+            ext.def_id = self.new_def_id();
+            self.insert_qualified_name(
+                get_qualified_name(ext.name.clone()),
+                ext.def_id.clone(),
+                &ext.node_id
+            )?;
+        }
+        for item in &mut module.items {
+            item.def_id = self.new_def_id();
+            self.insert_qualified_name(
+                get_qualified_name(item.name.clone()),
+                item.def_id.clone(),
+                &item.node_id
+            )?;
         }
         
-        // Resolve items, note each resolve_item() call starts with an empty scope.
+        // Resolve items, note each resolve_item() call starts with an empty local scope
         for item in module.items.iter_mut() {
             self.resolve_expr(&mut item.expr, im::HashMap::new())?;
         }

@@ -19,6 +19,9 @@ pub struct LexerState<'a> {
 #[derive(Clone, Debug, Logos, PartialEq)]
 #[logos(extras = LexerState<'s>, error = LexerError)]
 pub enum Token {
+    #[token("extern")]
+    KwExtern,
+
     #[token("module")]
     KwModule,
     #[token("import")]
@@ -218,6 +221,7 @@ pub fn tokenize(source: &String, filepath: PathBuf, operator_map: &mut HashMap<S
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Token::KwExtern => write!(f, "'extern'"),
             Token::KwModule => write!(f, "'module'"),
             Token::KwImport => write!(f, "'import'"),
             Token::KwExport => write!(f, "'export'"),
