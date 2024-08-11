@@ -14,6 +14,8 @@ pub enum ErrorKind {
     UnknownToken,
     ExpectedOneOf(Token, Vec<String>),
     UnexpectedIndent(usize),
+    UndeclaredOperator(String),
+    InvalidPrefixOperator(String),
 
     // Module sort errors
     CircularDependency,
@@ -68,6 +70,8 @@ impl Display for ErrorKind {
                 }
             }
             UnexpectedIndent(size) => write!(f, "Unexpected indent of size {} here", size),
+            UndeclaredOperator(oper) => write!(f, "Undeclared operator {} encountered here", oper),
+            InvalidPrefixOperator(oper) => write!(f, "Invalid prefix operator {}", oper),
 
             CircularDependency => write!(f, "Modules have a circular dependency"),
             UnknownModule => write!(f, "Could not find module"),

@@ -1,6 +1,8 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
-use logos::{skip, FilterResult, Lexer, Logos};
+use logos::{skip, Filter, FilterResult, Lexer, Logos, Span};
+
+use crate::{cache::Location, error::{Error, ErrorKind}, parser::Precedence};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum LexerError {
@@ -9,8 +11,13 @@ pub enum LexerError {
     Default,
 }
 
+pub struct LexerState<'a> {
+    indents: Vec<usize>,
+    operator_map: &'a mut HashMap<String, Precedence>,
+}
+
 #[derive(Clone, Debug, Logos, PartialEq)]
-#[logos(extras = Vec<usize>, error = LexerError)]
+#[logos(extras = LexerState<'s>, error = LexerError)]
 pub enum Token {
     #[token("module")]
     KwModule,
@@ -99,6 +106,11 @@ pub enum Token {
     #[token(" .")]
     SpacedDot,
 
+    // Regex for operator identifier should be the same as the one for the Operator
+    // token
+    #[regex(r"(infl|infr|pref|post)\s+[\+\-*\/^!|<>=?$@#%:]+\s+[0-9]+\n", oper_decl_callback)]
+    OperDecl,
+
     // Priority is set lower for these three because the patterns can also match
     // reserved keywords / operators.
     #[regex(r"[\+\-*\/^!|<>=?$@#%:]+", priority = 1, callback = |lex| lex.slice().to_owned())]
@@ -122,21 +134,42 @@ pub enum Token {
     Eof,
 }
 
-fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
-    let cur_col = lexer.extras.last().copied().unwrap_or(0);
+fn oper_decl_callback(lexer: &mut Lexer<Token>) -> Filter<()> {
+    let parts = lexer.slice().split_ascii_whitespace().collect::<Vec<&str>>();
+    let prec = parts[2].parse::<u8>().expect("Failed to parse operator precedence");
 
+    // Left associative operators need higher right precedence,
+    // right associative operators need higher left precedence
+    let entry = match parts[0] {
+        "pref" => Precedence::Prefix(prec * 2),
+        "infl" => Precedence::Infix(prec * 2, prec * 2 + 1),
+        "infr" => Precedence::Infix(prec * 2 + 1, prec * 2),
+        "post" => Precedence::Postfix(prec * 2),
+        // This should never happen, regex should not match other
+        other => panic!("Bad fixity {:?}", other),
+    };
+
+    lexer.extras.operator_map.insert(String::from(parts[1]), entry);
+
+    Filter::Skip
+}
+
+fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
     let new_col = lexer
         .slice()
         .chars()
         .filter(|ch| *ch == ' ' || *ch == '\t')
         .count();
 
+    let indents = &mut lexer.extras.indents;
+    let cur_col = indents.last().copied().unwrap_or(0);
+
     match new_col.cmp(&cur_col) {
         std::cmp::Ordering::Less => {
-            if lexer.extras.contains(&new_col) || new_col == 0 {
+            if indents.contains(&new_col) || new_col == 0 {
                 // Drop all indentation levels greater than new_col
-                while lexer.extras.last().copied().unwrap_or(0) != new_col {
-                    lexer.extras.pop();
+                while indents.last().copied().unwrap_or(0) != new_col {
+                    indents.pop();
                 }
 
                 FilterResult::Emit(Token::Dedent)
@@ -148,10 +181,38 @@ fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerErr
         std::cmp::Ordering::Equal => FilterResult::Emit(Token::Newline),
 
         std::cmp::Ordering::Greater => {
-            lexer.extras.push(new_col);
+            indents.push(new_col);
             FilterResult::Emit(Token::Indent)
         }
     }
+}
+
+pub fn tokenize(source: &String, filepath: PathBuf, operator_map: &mut HashMap<String, Precedence>) -> Result<Vec<(Token, Span)>, Error> {
+    let mut tokens = Vec::new();
+
+    let lexer = Token::lexer_with_extras(source, LexerState {
+        indents: Vec::new(),
+        operator_map,
+    }).spanned();
+    
+    for lex in lexer {
+        match lex {
+            (Ok(token), span) => tokens.push((token, span)),
+            (Err(lexer_error), span) => return Err(
+                // Translate lexer errors
+                match lexer_error {
+                    LexerError::UnexpectedIndent(size) => {
+                        Error::new(ErrorKind::UnexpectedIndent(size), Location::new(filepath, span))
+                    }
+                    LexerError::Default => {
+                        Error::new(ErrorKind::UnknownToken, Location::new(filepath, span))
+                    }
+                }
+            ),
+        }
+    }
+
+    Ok(tokens)
 }
 
 impl Display for Token {
@@ -194,6 +255,7 @@ impl Display for Token {
             Token::BigArrow => write!(f, "'=>'"),
             Token::Dot => write!(f, "'.'"),
             Token::SpacedDot => write!(f, "' .'"),
+            Token::OperDecl => write!(f, "operator declaration"),
             Token::Operator(_) => write!(f, "operator"),
             Token::UpperIdentifier(_) => write!(f, "uppercase identifier"),
             Token::LowerIdentifier(_) => write!(f, "lowercase identifier"),

@@ -1,5 +1,9 @@
+post ! 10
+
 fn id : a -> a
     x = x
 
+let (!) : i32 = 12
+
 let test : i32 = let n = (5) in id (let n = n in id n)
-let abc : bool = let res = id prelude.id true in if res then res else false
+let abc : bool = let res = id prelude.id true in if res then res else false!

@@ -4,23 +4,24 @@ use crate::{
     ast::*,
     cache::{CompilerCache, Location},
     error::{Error, ErrorKind},
-    lexer::{LexerError, Token},
+    lexer::Token,
     types::*,
 };
-use logos::{Logos, Span};
+use logos::Span;
+
+pub enum Precedence {
+    Prefix(u8),
+    Infix(u8, u8),
+    Postfix(u8),
+}
 
 pub struct Parser<'a> {
     compiler_cache: &'a mut CompilerCache,
-
     node_id_count: usize,
     tokens: VecDeque<(Token, Span)>,
     filepath: PathBuf,
     previous: Option<(Token, Span)>,
-
-    // Maps for operator precedences
-    prefix_precs: HashMap<String, u8>,
-    infix_precs: HashMap<String, (u8, u8)>,
-    postfix_precs: HashMap<String, u8>,
+    operator_map: HashMap<String, Precedence>,
 }
 
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
@@ -39,16 +40,14 @@ macro_rules! expected_one_of {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(compiler_cache: &'a mut CompilerCache) -> Parser<'a> {
+    pub fn new(compiler_cache: &'a mut CompilerCache, operator_map: HashMap<String, Precedence>) -> Parser<'a> {
         Parser {
             compiler_cache,
             node_id_count: 0,
             tokens: VecDeque::new(),
             filepath: PathBuf::new(),
             previous: None,
-            prefix_precs: HashMap::new(),
-            infix_precs: HashMap::new(),
-            postfix_precs: HashMap::new(),
+            operator_map,
         }
     }
 
@@ -140,10 +139,19 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Consume any identifier
+    // Consume any identifier (including parenthesized operators)
     fn expect_identifier(&mut self) -> Result<String, Error> {
         match self.next_with_span() {
             (Token::LowerIdentifier(ident) | Token::UpperIdentifier(ident), _) => Ok(ident),
+            (Token::LeftParen, _) => {
+                let (token, span) = self.next_with_span();
+                if let Token::Operator(oper) = token {
+                    self.expect(Token::RightParen)?;
+                    Ok(oper)
+                } else {
+                    self.error(expected_one_of!(token, "operator"), span)
+                }
+            }
             (other, span) => self.error(expected_one_of!(other, "identifier"), span),
         }
     }
@@ -410,10 +418,9 @@ impl<'a> Parser<'a> {
 
     // Parse operators with a pratt parser
     fn parse_oper_expr(&mut self, min_prec: u8) -> Result<Expr, Error> {
-        let mut lhs = match self.peek() {
-            Token::Operator(oper) => {
-                if let Some(right_prec) = self.prefix_precs.get(oper) {
-                    let oper = oper.clone();
+        let mut lhs = match self.next_with_span() {
+            (Token::Operator(oper), span) => {
+                if let Some(Precedence::Prefix(right_prec)) = self.operator_map.get(&oper) {
                     let expr = self.parse_oper_expr(*right_prec)?;
                     Parser::unary_oper(
                         oper,
@@ -421,10 +428,13 @@ impl<'a> Parser<'a> {
                         expr,
                     )
                 } else {
-                    panic!("got non-prefix operator");
+                    return self.error(ErrorKind::InvalidPrefixOperator(oper), span);
                 }
             }
-            _ => self.parse_app()?,
+            _ => {
+                self.restore();
+                self.parse_app()?
+            }
         };
 
         loop {
@@ -435,22 +445,24 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
 
-            if let Some(left_prec) = self.postfix_precs.get(&oper) {
-                if *left_prec < min_prec {
+            let (_, span) = self.next_with_span();
+
+            let prec = self.operator_map
+                .get(&oper)
+                .ok_or(self.make_error(ErrorKind::UndeclaredOperator(oper.clone()), span.clone()))?;
+
+            if let Precedence::Postfix(left_prec) = *prec {
+                if left_prec < min_prec {
                     break;
                 }
-                let (_, span) = self.next_with_span();
-                // Desugar unary operator
                 lhs = Parser::unary_oper(oper, self.cache_location(span), lhs);
                 continue;
             }
 
-            if let Some((left_prec, right_prec)) = self.infix_precs.get(&oper).copied() {
+            if let Precedence::Infix(left_prec, right_prec) = *prec {
                 if left_prec < min_prec {
                     break;
                 }
-                let (_, span) = self.next_with_span();
-                // Desugar binary operator
                 lhs = Parser::binary_oper(
                     oper,
                     self.cache_location(span),
@@ -596,35 +608,10 @@ impl<'a> Parser<'a> {
         Ok(export)
     }
 
-    pub fn parse_module(&mut self, input: &String, module_name: Vec<String>, filepath: PathBuf) -> Result<Module, Error> {
+    pub fn parse_module(&mut self, tokens: Vec<(Token, Span)>, module_name: Vec<String>, filepath: PathBuf) -> Result<Module, Error> {
+        self.tokens = VecDeque::from(tokens);
         self.filepath = filepath;
 
-        // Tokenize input
-        let lexer = Token::lexer(input).spanned();
-
-        self.tokens.clear();
-        for lex in lexer {
-            match lex {
-                (Ok(token), span) => self.tokens.push_back((token, span)),
-                (Err(lexer_error), span) => {
-                    return {
-                        // Translate lexer errors
-                        match lexer_error {
-                            LexerError::UnexpectedIndent(size) => {
-                                self.error(ErrorKind::UnexpectedIndent(size), span)
-                            }
-                            LexerError::Default => self.error(ErrorKind::UnknownToken, span),
-                        }
-                    }
-                }
-            }
-        }
-
-        for token in self.tokens.clone() {
-            println!("{:#?}", token);
-        }
-
-        // Parse input
         let mut imports = Vec::new();
         let mut exports = Vec::new();
         let mut items = Vec::new();

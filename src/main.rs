@@ -1,8 +1,9 @@
-use std::{fs::read_to_string, path::Path};
+use std::{collections::HashMap, fs::read_to_string, path::Path};
 
 use cache::CompilerCache;
 use clap::Parser as _;
 use error::Error;
+use lexer::tokenize;
 use parser::Parser;
 use resolver::resolve_program;
 use sorter::sort_program;
@@ -60,19 +61,27 @@ fn get_module_name(root: &Path, file: &Path) -> Vec<String> {
 
 fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
     let mut compiler_cache = CompilerCache::new();
-    let mut program = Vec::new();
 
-    let mut parser = Parser::new(&mut compiler_cache);
+    let mut operator_map = HashMap::new();
+    let mut parser_inputs = Vec::new();
 
+    // Tokenize all files and collect all operator declarations before parsing
     for file in files {
         let path = file.path();
-        let source =
-            read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
+        let source = read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
 
+        let tokens = tokenize(&source, path.to_path_buf(), &mut operator_map)?;
+        parser_inputs.push((tokens, path.to_path_buf()));
+    }
+
+    let mut parser = Parser::new(&mut compiler_cache, operator_map);
+    let mut program = Vec::new();
+
+    for (tokens, path) in parser_inputs {
         program.push(parser.parse_module(
-            &source,
-            get_module_name(root, path),
-            path.to_path_buf(),
+            tokens,
+            get_module_name(root, path.as_path()),
+            path,
         )?);
     }
 
