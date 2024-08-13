@@ -9,7 +9,7 @@ use crate::types::*;
 
 #[derive(Clone, Debug)]
 enum Constraint {
-    TypeEqual(Type, Type, NodeId),
+    TypeEqual(Type, Type, Location),
 }
 
 struct TypeChecker<'a> {
@@ -31,17 +31,17 @@ impl<'a> TypeChecker<'a> {
         self.unification_table.new_key(None)
     }
 
-    fn cache_expr_type(&mut self, node_id: &NodeId, expr_type: &Type) {
+    fn cache_expr_type(&mut self, expr_id: &ExprId, expr_type: &Type) {
         self.compiler_cache
             .expr_type_map
-            .insert(node_id.clone(), expr_type.clone());
+            .insert(expr_id.clone(), expr_type.clone());
     }
 
     // Infer (synthesize) expression type. Only one of infer_expr or check_expr
     // should ever be called on an expression
     fn infer_expr(&mut self, env: im::HashMap<DefId, Type>, expr: &Expr) -> (Vec<Constraint>, Type) {
         let (constraints, expr_type) = match &expr.kind {
-            ExprKind::Lit { literal } => {
+            ExprKind::Lit(literal) => {
                 (
                     Vec::new(),
                     match literal {
@@ -126,7 +126,7 @@ impl<'a> TypeChecker<'a> {
             }
         };
 
-        self.cache_expr_type(&expr.node_id, &expr_type);
+        self.cache_expr_type(&expr.expr_id, &expr_type);
 
         (constraints, expr_type)
     }
@@ -137,15 +137,15 @@ impl<'a> TypeChecker<'a> {
     // TODO:
     // We can probably pass expected_type as a reference here
     fn check_expr(&mut self, env: im::HashMap<DefId, Type>, expr: &Expr, expected_type: Type) -> Vec<Constraint> {
-        self.cache_expr_type(&expr.node_id, &expected_type);
+        self.cache_expr_type(&expr.expr_id, &expected_type);
 
         match (&expr.kind, expected_type) {
-            (ExprKind::Lit { literal: Lit::Int(_) }, t) if t == Type::i32() => Vec::new(),
-            (ExprKind::Lit { literal: Lit::Float(_) }, t) if t == Type::f32() => Vec::new(),
-            (ExprKind::Lit { literal: Lit::String(_) }, t) if t == Type::str() => Vec::new(),
-            (ExprKind::Lit { literal: Lit::Char(_) }, t) if t == Type::char() => Vec::new(),
-            (ExprKind::Lit { literal: Lit::Bool(_) }, t) if t == Type::bool() => Vec::new(),
-            (ExprKind::Lit { literal: Lit::Unit }, t) if t == Type::unit() => Vec::new(),
+            (ExprKind::Lit(Lit::Int(_)), t) if t == Type::i32() => Vec::new(),
+            (ExprKind::Lit(Lit::Float(_)), t) if t == Type::f32() => Vec::new(),
+            (ExprKind::Lit(Lit::String(_)), t) if t == Type::str() => Vec::new(),
+            (ExprKind::Lit(Lit::Char(_)), t) if t == Type::char() => Vec::new(),
+            (ExprKind::Lit(Lit::Bool(_)), t) if t == Type::bool() => Vec::new(),
+            (ExprKind::Lit(Lit::Unit), t) if t == Type::unit() => Vec::new(),
 
             (ExprKind::Lam { param_def_id, param: _, body }, Type::Fun(param_type, ret_type)) => {
                 let new_env = env.update(param_def_id.clone(), *param_type);
@@ -169,7 +169,7 @@ impl<'a> TypeChecker<'a> {
                 constraints.push(Constraint::TypeEqual(
                     expected_type,
                     inferred_type,
-                    expr.node_id.clone(),
+                    expr.location.clone(),
                 ));
 
                 constraints
@@ -195,7 +195,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn unify(&mut self, unnorm_left: Type, unnorm_right: Type, node_id: &NodeId) -> Result<(), Error> {
+    fn unify(&mut self, unnorm_left: Type, unnorm_right: Type, location: Location) -> Result<(), Error> {
         let left = self.normalize_type(unnorm_left);
         let right = self.normalize_type(unnorm_right);
 
@@ -207,33 +207,33 @@ impl<'a> TypeChecker<'a> {
             (Type::Const(name_a), Type::Const(name_b)) if name_a == name_b => Ok(()),
 
             (Type::Fun(param_a, ret_a), Type::Fun(param_b, ret_b)) => {
-                self.unify(*param_a, *param_b, node_id)?;
-                self.unify(*ret_a, *ret_b, node_id)
+                self.unify(*param_a, *param_b, location.clone())?;
+                self.unify(*ret_a, *ret_b, location)
             }
 
             (Type::UniVar(uvar_a), Type::UniVar(uvar_b)) => self
                 .unification_table
                 .unify_var_var(uvar_a, uvar_b)
-                .map_err(|(l, r)| self.compiler_cache.make_error(ErrorKind::TypeMismatch(l, r), node_id)),
+                .map_err(|(l, r)| Error::new(ErrorKind::TypeMismatch(l, r), location)),
 
             (Type::UniVar(uvar), ty) | (ty, Type::UniVar(uvar)) => {
                 ty
                     .occurs_check(uvar)
-                    .map_err(|t| self.compiler_cache.make_error(ErrorKind::InfiniteType(t), node_id))?;
+                    .map_err(|t| Error::new(ErrorKind::InfiniteType(t), location.clone()))?;
 
                 self.unification_table
                     .unify_var_value(uvar, Some(ty))
-                    .map_err(|(l, r)| self.compiler_cache.make_error(ErrorKind::TypeMismatch(l, r), node_id))
+                    .map_err(|(l, r)| Error::new(ErrorKind::TypeMismatch(l, r), location))
             }
 
-            (left, right) => Err(self.compiler_cache.make_error(ErrorKind::TypeMismatch(left, right), node_id)),
+            (left, right) => Err(Error::new(ErrorKind::TypeMismatch(left, right), location)),
         }
     }
 
     fn solve_constraints(&mut self, constraints: Vec<Constraint>) -> Result<(), Error> {
         for constraint in constraints {
             match constraint {
-                Constraint::TypeEqual(left, right, node_id) => self.unify(left, right, &node_id)?,
+                Constraint::TypeEqual(left, right, location) => self.unify(left, right, location)?,
             }
         }
         Ok(())

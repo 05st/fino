@@ -74,7 +74,7 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
         parser_inputs.push((tokens, path.to_path_buf()));
     }
 
-    let mut parser = Parser::new(&mut compiler_cache, operator_map);
+    let mut parser = Parser::new(operator_map);
     let mut program = Vec::new();
 
     for (tokens, path) in parser_inputs {
@@ -85,8 +85,8 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
         )?);
     }
 
-    sort_program(&mut compiler_cache, &mut program)?;
-    resolve_program(&mut compiler_cache, &mut program)?;
+    sort_program(&mut program)?;
+    resolve_program(&mut program)?;
     typecheck_program(&mut compiler_cache, &program)?;
 
     println!("{:#?}", program);

@@ -3,8 +3,7 @@ use std::fs::read_to_string;
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
-use crate::ast::Name;
-use crate::cache::Location;
+use crate::ast::{Location, Name};
 use crate::lexer::Token;
 use crate::types::Type;
 
@@ -44,8 +43,8 @@ impl Error {
     pub fn report(&self) {
         // File was already read for input to parser, we should probably cache that and
         // use it here instead of reading it again.
-        let source = read_to_string(self.location.filepath.as_path()).unwrap();
-        let filename = self.location.filepath.to_string_lossy().into_owned();
+        let source = read_to_string(self.location.path.as_path()).unwrap();
+        let filename = self.location.path.to_string_lossy().into_owned();
 
         Report::build(ReportKind::Error, &filename, self.location.span.start)
             .with_message(self.kind.to_string())

@@ -1,46 +1,39 @@
-use std::{collections::HashMap, iter::once};
+use std::collections::HashMap;
 
 use crate::{
     ast::*,
-    cache::CompilerCache,
     error::{Error, ErrorKind},
 };
 
-struct NameResolver<'a> {
-    compiler_cache: &'a mut CompilerCache,
-    // Only top-level functions definitions are stored in qualified_name_map
-    qualified_name_map: HashMap<Vec<String>, DefId>,
+struct NameResolver {
+    // Item definitions are only stored in item_map, not in the local scope
+    item_map: HashMap<Vec<String>, DefId>,
     def_id_count: usize,
-    current_module_name: Option<Vec<String>>,
-    current_module_imports: Option<Vec<Import>>,
 }
 
-impl<'a> NameResolver<'a> {
-    fn new(compiler_cache: &'a mut CompilerCache) -> NameResolver<'a> {
+impl NameResolver {
+    fn new() -> NameResolver {
         NameResolver {
-            compiler_cache,
-            qualified_name_map: HashMap::new(),
+            item_map: HashMap::new(),
             def_id_count: 0,
-            current_module_name: None,
-            current_module_imports: None,
         }
     }
 
-    fn insert_qualified_name(&mut self, name: Vec<String>, id: DefId, node_id: &NodeId) -> Result<(), Error> {
-        if self.qualified_name_map.contains_key(&name) {
-            return Err(self.compiler_cache.make_error(ErrorKind::Redefinition(name), node_id));
+    fn insert_item(&mut self, name: Vec<String>, id: DefId, location: &Location) -> Result<(), Error> {
+        if self.item_map.contains_key(&name) {
+            return Err(Error::new(ErrorKind::Redefinition(name), location.clone()));
         }
-        self.qualified_name_map.insert(name, id);
+        self.item_map.insert(name, id);
         Ok(())
     }
 
-    fn lookup_name(&self, name: &Name, scope: im::HashMap<String, DefId>, node_id: &NodeId) -> Result<DefId, Error> {
+    fn lookup_name(&self, name: &Name, scope: im::HashMap<String, DefId>, location: &Location) -> Result<DefId, Error> {
         match name {
             Name::Qualified(qual) => {
-                // Qualified name refers to top-level definition, just check qualified_name_map
-                match self.qualified_name_map.get(qual) {
+                // Qualified names can only refer to top-level definitions
+                match self.item_map.get(qual) {
                     Some(def_id) => Ok(def_id.clone()),
-                    None => Err(self.compiler_cache.make_error(ErrorKind::UnknownVariable(name.clone()), node_id)),
+                    None => Err(Error::new(ErrorKind::UnknownVariable(name.clone()), location.clone())),
                 }
             }
             Name::Unqualified(ident) => {
@@ -50,26 +43,10 @@ impl<'a> NameResolver<'a> {
                     None => (),
                 };
 
-                // Otherwise check top-level definitions of current module and imported modules
-                let module_names = self
-                    .current_module_imports
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .map(|import| &import.module_name)
-                    .chain(once(self.current_module_name.as_ref().unwrap()));
+                // TODO
+                // Check imported modules
 
-                for module_name in module_names {
-                    let mut qual = module_name.clone();
-                    qual.push(ident.clone());
-
-                    match self.qualified_name_map.get(&qual) {
-                        Some(def_id) => return Ok(def_id.clone()),
-                        None => (),
-                    }
-                }
-
-                Err(self.compiler_cache.make_error(ErrorKind::UnknownVariable(name.clone()), node_id))
+                Err(Error::new(ErrorKind::UnknownVariable(name.clone()), location.clone()))
             }
         }
     }
@@ -83,9 +60,9 @@ impl<'a> NameResolver<'a> {
 
     fn resolve_expr(&mut self, expr: &mut Expr, scope: im::HashMap<String, DefId>) -> Result<(), Error> {
         match &mut expr.kind {
-            ExprKind::Lit { literal: _ } => Ok(()),
+            ExprKind::Lit(_) => Ok(()),
             ExprKind::Var { ref mut def_id, name } => {
-                *def_id = self.lookup_name(&name, scope, &expr.node_id)?;
+                *def_id = self.lookup_name(&name, scope, &expr.location)?;
                 Ok(())
             }
             ExprKind::App { ref mut fun, ref mut arg } => {
@@ -115,34 +92,31 @@ impl<'a> NameResolver<'a> {
         }
     }
 
-    fn resolve_module(&mut self, module: &'a mut Module) -> Result<(), Error> {
-        self.current_module_name = Some(module.module_name.clone());
-        self.current_module_imports = Some(module.imports.clone());
-
+    fn resolve_module(&mut self, module: &mut Module) -> Result<(), Error> {
         let get_qualified_name = |name| {
             let mut qualified_name = module.module_name.clone();
             qualified_name.push(name);
             qualified_name
         };
 
-        // Insert top-level definitions to qualified_name_map
+        // Insert item definitions to qualified_name_map
         for ext in &mut module.externs {
             ext.def_id = self.new_def_id();
-            self.insert_qualified_name(
+            self.insert_item(
                 get_qualified_name(ext.name.clone()),
                 ext.def_id.clone(),
-                &ext.node_id
+                &ext.location,
             )?;
         }
         for item in &mut module.items {
             item.def_id = self.new_def_id();
-            self.insert_qualified_name(
+            self.insert_item(
                 get_qualified_name(item.name.clone()),
                 item.def_id.clone(),
-                &item.node_id
+                &item.location,
             )?;
         }
-        
+
         // Resolve items, note each resolve_item() call starts with an empty local scope
         for item in module.items.iter_mut() {
             self.resolve_expr(&mut item.expr, im::HashMap::new())?;
@@ -152,8 +126,8 @@ impl<'a> NameResolver<'a> {
     }
 }
 
-pub fn resolve_program(compiler_cache: &mut CompilerCache, program: &mut Vec<Module>) -> Result<(), Error> {
-    let mut resolver = NameResolver::new(compiler_cache);
+pub fn resolve_program(program: &mut Vec<Module>) -> Result<(), Error> {
+    let mut resolver = NameResolver::new();
     for module in program {
         resolver.resolve_module(module)?;
     }

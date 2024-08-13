@@ -1,13 +1,11 @@
-use std::{borrow::BorrowMut, collections::{BTreeSet, HashMap, VecDeque}, ops::Range, path::PathBuf};
+use std::{collections::{BTreeSet, HashMap, VecDeque}, ops::Range, path::PathBuf};
 
 use crate::{
     ast::*,
-    cache::{CompilerCache, Location},
     error::{Error, ErrorKind},
     lexer::Token,
-    types::*,
+    types::{Type, TypeScheme, TypeVar},
 };
-use logos::Span;
 
 pub enum Precedence {
     Prefix(u8),
@@ -15,13 +13,15 @@ pub enum Precedence {
     Postfix(u8),
 }
 
-pub struct Parser<'a> {
-    compiler_cache: &'a mut CompilerCache,
-    node_id_count: usize,
+pub struct Parser {
     tokens: VecDeque<(Token, Span)>,
-    filepath: PathBuf,
     previous: Option<(Token, Span)>,
+    filepath: PathBuf,
+
     operator_map: HashMap<String, Precedence>,
+
+    expr_id_count: usize,
+    module_id_count: usize,
 }
 
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
@@ -39,29 +39,16 @@ macro_rules! expected_one_of {
     };
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(compiler_cache: &'a mut CompilerCache, operator_map: HashMap<String, Precedence>) -> Parser<'a> {
+impl Parser {
+    pub fn new(operator_map: HashMap<String, Precedence>) -> Parser {
         Parser {
-            compiler_cache,
-            node_id_count: 0,
             tokens: VecDeque::new(),
-            filepath: PathBuf::new(),
             previous: None,
+            filepath: PathBuf::new(),
             operator_map,
+            expr_id_count: 0,
+            module_id_count: 0,
         }
-    }
-
-    // Insert node id to location mapping into compiler cache
-    fn cache_location(&mut self, span: Span) -> NodeId {
-        let node_id = NodeId(self.node_id_count);
-        self.node_id_count += 1;
-
-        let location = Location::new(self.filepath.clone(), span);
-        self.compiler_cache
-            .location_map
-            .insert(node_id.clone(), location);
-
-        node_id
     }
 
     // Puts previous token into token stream. Can only be called once before another
@@ -73,6 +60,17 @@ impl<'a> Parser<'a> {
         // otherwise .unwrap() will panic
         self.tokens.push_front(self.previous.to_owned().unwrap());
         self.previous = None;
+    }
+
+    fn new_expr_id(&mut self) -> ExprId {
+        let expr_id = ExprId(self.expr_id_count);
+        self.expr_id_count += 1;
+        expr_id
+    }
+
+    // Insert node id to location mapping into compiler cache
+    fn make_location(&self, span: Span) -> Location {
+        Location::new(self.filepath.clone(), span)
     }
 
     // TODO:
@@ -98,7 +96,6 @@ impl<'a> Parser<'a> {
     // Advance token stream and return popped (token, span)
     fn next_with_span(&mut self) -> (Token, Span) {
         let result = self
-            .borrow_mut()
             .tokens
             .pop_front()
             .unwrap_or((Token::Eof, self.make_eof_span()));
@@ -240,9 +237,10 @@ impl<'a> Parser<'a> {
         let body = self.parse_expr()?;
 
         Ok(Expr {
-            node_id: self.cache_location(let_span),
+            location: self.make_location(let_span),
+            expr_id: self.new_expr_id(),
             kind: ExprKind::Let {
-                def_id: DefId(0),
+                def_id: DefId::default(),
                 name,
                 expr: Box::new(expr),
                 body: Box::new(body),
@@ -263,7 +261,8 @@ impl<'a> Parser<'a> {
         let fexpr = self.parse_expr()?;
 
         Ok(Expr {
-            node_id: self.cache_location(if_span),
+            location: self.make_location(if_span),
+            expr_id: self.new_expr_id(),
             kind: ExprKind::If {
                 cond: Box::new(cond),
                 texpr: Box::new(texpr),
@@ -298,54 +297,49 @@ impl<'a> Parser<'a> {
                 };
 
                 Ok(Expr {
-                    node_id: self.cache_location(span),
+                    location: self.make_location(span),
+                    expr_id: self.new_expr_id(),
                     kind: ExprKind::Var {
-                        def_id: DefId(0),
+                        def_id: DefId::default(),
                         name: name,
                     },
                 })
             }
 
             Token::LitBool(b) => Ok(Expr {
-                node_id: self.cache_location(span),
-                kind: ExprKind::Lit {
-                    literal: Lit::Bool(b),
-                },
+                location: self.make_location(span),
+                expr_id: self.new_expr_id(),
+                kind: ExprKind::Lit(Lit::Bool(b)),
             }),
 
-            Token::LitInteger(n) => Ok(Expr {
-                node_id: self.cache_location(span),
-                kind: ExprKind::Lit {
-                    literal: Lit::Int(n),
-                },
+            Token::LitInteger(i) => Ok(Expr {
+                location: self.make_location(span),
+                expr_id: self.new_expr_id(),
+                kind: ExprKind::Lit(Lit::Int(i)),
             }),
 
-            Token::LitFloat(x) => Ok(Expr {
-                node_id: self.cache_location(span),
-                kind: ExprKind::Lit {
-                    literal: Lit::Float(x),
-                },
+            Token::LitFloat(f) => Ok(Expr {
+                location: self.make_location(span),
+                expr_id: self.new_expr_id(),
+                kind: ExprKind::Lit(Lit::Float(f)),
             }),
 
             Token::LitString(s) => Ok(Expr {
-                node_id: self.cache_location(span),
-                kind: ExprKind::Lit {
-                    literal: Lit::String(s),
-                },
+                location: self.make_location(span),
+                expr_id: self.new_expr_id(),
+                kind: ExprKind::Lit(Lit::String(s)),
             }),
 
             Token::LitChar(c) => Ok(Expr {
-                node_id: self.cache_location(span),
-                kind: ExprKind::Lit {
-                    literal: Lit::Char(c),
-                },
+                location: self.make_location(span),
+                expr_id: self.new_expr_id(),
+                kind: ExprKind::Lit(Lit::Char(c)),
             }),
 
             Token::LitUnit => Ok(Expr {
-                node_id: self.cache_location(span),
-                kind: ExprKind::Lit {
-                    literal: Lit::Unit,
-                },
+                location: self.make_location(span),
+                expr_id: self.new_expr_id(),
+                kind: ExprKind::Lit(Lit::Unit),
             }),
 
             other => Err((true, self.make_error(expected_one_of!(other, "identifier", "literal", "'('"), span)))
@@ -363,7 +357,8 @@ impl<'a> Parser<'a> {
             match self.parse_atom() {
                 Ok(arg_expr) => {
                     result = Expr {
-                        node_id: self.cache_location(arg_span),
+                        location: self.make_location(arg_span),
+                        expr_id: self.new_expr_id(),
                         kind: ExprKind::App {
                             fun: Box::new(result),
                             arg: Box::new(arg_expr),
@@ -384,14 +379,16 @@ impl<'a> Parser<'a> {
     }
 
     // Desugar unary operator application
-    fn unary_oper(oper: String, node_id: NodeId, expr: Expr) -> Expr {
+    fn unary_oper(&mut self, oper: String, location: Location, expr: Expr) -> Expr {
         Expr {
-            node_id: node_id.clone(),
+            location: location.clone(),
+            expr_id: self.new_expr_id(),
             kind: ExprKind::App {
                 fun: Box::new(Expr {
-                    node_id,
+                    location,
+                    expr_id: self.new_expr_id(),
                     kind: ExprKind::Var {
-                        def_id: DefId(0),
+                        def_id: DefId::default(),
                         name: Name::Unqualified(oper),
                     },
                 }),
@@ -401,17 +398,20 @@ impl<'a> Parser<'a> {
     }
 
     // Desugar binary operator application
-    fn binary_oper(oper: String, node_id: NodeId, left: Expr, right: Expr) -> Expr {
+    fn binary_oper(&mut self, oper: String, location: Location, left: Expr, right: Expr) -> Expr {
         Expr {
-            node_id: node_id.clone(),
+            location: location.clone(),
+            expr_id: self.new_expr_id(),
             kind: ExprKind::App {
                 fun: Box::new(Expr {
-                    node_id: node_id.clone(),
+                    location: location.clone(),
+                    expr_id: self.new_expr_id(),
                     kind: ExprKind::App {
                         fun: Box::new(Expr {
-                            node_id,
+                            location,
+                            expr_id: self.new_expr_id(),
                             kind: ExprKind::Var {
-                                def_id: DefId(0),
+                                def_id: DefId::default(),
                                 name: Name::Unqualified(oper),
                             },
                         }),
@@ -429,11 +429,7 @@ impl<'a> Parser<'a> {
             (Token::Operator(oper), span) => {
                 if let Some(Precedence::Prefix(right_prec)) = self.operator_map.get(&oper) {
                     let expr = self.parse_oper_expr(*right_prec)?;
-                    Parser::unary_oper(
-                        oper,
-                        self.cache_location(self.span()),
-                        expr,
-                    )
+                    self.unary_oper(oper, self.make_location(self.span()), expr)
                 } else {
                     return self.error(ErrorKind::InvalidPrefixOperator(oper), span);
                 }
@@ -461,7 +457,8 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 let (_, span) = self.next_with_span();
-                lhs = Parser::unary_oper(oper, self.cache_location(span), lhs);
+
+                lhs = self.unary_oper(oper, self.make_location(span), lhs);
                 continue;
             }
 
@@ -470,12 +467,9 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 let (_, span) = self.next_with_span();
-                lhs = Parser::binary_oper(
-                    oper,
-                    self.cache_location(span),
-                    lhs,
-                    self.parse_oper_expr(right_prec)?,
-                );
+
+                let rhs = self.parse_oper_expr(right_prec)?;
+                lhs = self.binary_oper(oper, self.make_location(span), lhs, rhs,);
                 continue;
             }
 
@@ -531,18 +525,19 @@ impl<'a> Parser<'a> {
         let expr = params
             .into_iter()
             .fold(body, |child, (param_name, span)| Expr {
-                node_id: self.cache_location(span),
+                location: self.make_location(span),
+                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lam {
-                    param_def_id: DefId(0),
+                    param_def_id: DefId::default(),
                     param: param_name,
                     body: Box::new(child),
                 },
             });
 
         Ok(Item {
-            node_id: self.cache_location(span),
+            location: self.make_location(span),
             name,
-            def_id: DefId(0),
+            def_id: DefId::default(),
             scheme,
             expr,
         })
@@ -564,9 +559,9 @@ impl<'a> Parser<'a> {
         self.expect(Token::Newline)?;
 
         Ok(Item {
-            node_id: self.cache_location(span),
+            location: self.make_location(span),
             name,
-            def_id: DefId(0),
+            def_id: DefId::default(),
             scheme,
             expr,
         })
@@ -580,7 +575,7 @@ impl<'a> Parser<'a> {
         self.expect(Token::Newline)?;
 
         Ok(Import {
-            node_id: self.cache_location(span),
+            location: self.make_location(span),
             module_name,
         })
     }
@@ -593,14 +588,14 @@ impl<'a> Parser<'a> {
             self.next();
 
             Export::Module {
-                node_id: self.cache_location(span),
+                location: self.make_location(span),
                 module_name: self.parse_separated_name()?,
             }
         } else {
             Export::Item {
-                node_id: self.cache_location(span),
-                def_id: DefId(0),
-                name: self.expect_identifier()?,
+                location: self.make_location(span),
+                def_id: DefId::default(),
+                item_name: self.expect_identifier()?,
             }
         };
 
@@ -620,8 +615,8 @@ impl<'a> Parser<'a> {
         self.expect(Token::Newline)?;
 
         Ok(Extern {
-            node_id: self.cache_location(span),
-            def_id: DefId(0),
+            location: self.make_location(span),
+            def_id: DefId::default(),
             name,
             scheme,
         })
@@ -660,7 +655,11 @@ impl<'a> Parser<'a> {
             }
         }
 
+        let module_id = ModuleId(self.module_id_count);
+        self.module_id_count += 1;
+
         Ok(Module {
+            module_id,
             module_name,
             externs,
             imports,
