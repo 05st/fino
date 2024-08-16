@@ -55,7 +55,7 @@ pub enum ExprKind {
     },
     Let {
         name: String,
-        expr: Box<Expr>,
+        aexpr: Box<Expr>,
         body: Box<Expr>,
         definition_id: Option<DefinitionId>,
     },

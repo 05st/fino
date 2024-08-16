@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
-use crate::{ast::Module, parser::Precedence};
+use crate::{ast::{Location, Module}, parser::Precedence};
 
 #[derive(Default)]
 pub struct CompilerCache {
     // Indexed by ModuleIds
-    pub modules: Vec<Module>,
+    pub modules: VecDeque<Module>,
     // Indexed by DefinitionIds
     pub definitions: Vec<Definition>,
     // Maps operator name to operator precedence info
@@ -14,7 +14,10 @@ pub struct CompilerCache {
     pub module_ids: HashMap<Vec<String>, ModuleId>,
 }
 
-pub struct Definition {}
+#[derive(Debug)]
+pub struct Definition {
+    pub location: Location,
+}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ModuleId(pub usize);

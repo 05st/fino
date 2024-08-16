@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
             location: self.make_location(let_span),
             kind: ExprKind::Let {
                 name,
-                expr: Box::new(expr),
+                aexpr: Box::new(expr),
                 body: Box::new(body),
                 definition_id: None,
             },
@@ -637,7 +637,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.compiler_cache.modules.push(Module {
+        self.compiler_cache.modules.push_back(Module {
             module_path,
             externs,
             imports,

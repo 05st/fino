@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::{
     ast::{Location, Module},
@@ -26,7 +26,7 @@ impl<'a> ModuleSorter<'a> {
 
         // Initialize processing_queue with all module paths
         // Move modules from compiler_cache.modules to module_map
-        while let Some(module) = compiler_cache.modules.pop() {
+        while let Some(module) = compiler_cache.modules.pop_back() {
             processing_queue.push(module.module_path.clone());
             module_map.insert(module.module_path.clone(), module);
         }
@@ -88,7 +88,7 @@ pub fn sort_program(compiler_cache: &mut CompilerCache) -> Result<(), Error> {
     let mut module_sorter = ModuleSorter::new(compiler_cache);
     module_sorter.process()?;
 
-    compiler_cache.modules = module_sorter.sorted_modules;
+    compiler_cache.modules = VecDeque::from(module_sorter.sorted_modules);
 
     Ok(())
 }

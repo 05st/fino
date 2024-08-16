@@ -4,6 +4,7 @@ use std::fs::read_to_string;
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
 use crate::ast::{Location, Name};
+use crate::cache::Definition;
 use crate::lexer::Token;
 use crate::types::Type;
 
@@ -22,7 +23,12 @@ pub enum ErrorKind {
 
     // Name resolution errors
     UnknownVariable(Name),
-    Redefinition(Vec<String>),
+    Redefinition(Vec<String>), // Only possible with top-level definitions
+    MultipleDefinitions(String), // Only possible when looking up unqualified name
+    ExportedUnimportedModule(Vec<String>),
+    AlreadyImportedModule(Vec<String>),
+    AlreadyExportedDefinition(String),
+    AlreadyExportedModule(Vec<String>),
 
     // Type inference errors
     TypeMismatch(Type, Type),
@@ -78,8 +84,13 @@ impl Display for ErrorKind {
             UnknownVariable(name) => match name {
                 Name::Qualified(qual) => write!(f, "Unknown variable {}", qual.join(".")),
                 Name::Unqualified(ident) => write!(f, "Unknown variable {}", ident),
-            },
+            }
             Redefinition(qual) => write!(f, "{} is already defined", qual.join(".")),
+            MultipleDefinitions(name) => write!(f, "Multiple definitions for {} found", name),
+            ExportedUnimportedModule(module_path) => write!(f, "{} was never imported", module_path.join(".")),
+            AlreadyImportedModule(module_path) => write!(f, "{} was already imported", module_path.join(".")),
+            AlreadyExportedDefinition(name) => write!(f, "{} was already exported", name),
+            AlreadyExportedModule(module_path) => write!(f, "{} was already exported", module_path.join(".")),
 
             TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
             InfiniteType(t) => write!(f, "Attempt to construct infinite type {} here", t),

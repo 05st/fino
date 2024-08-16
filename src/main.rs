@@ -37,8 +37,8 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
 
     parse_program(&mut compiler_cache, files, root)?;
     sort_program(&mut compiler_cache)?;
+    resolve_program(&mut compiler_cache)?;
     println!("{:#?}", compiler_cache.modules);
-    // resolve_program(&mut compiler_cache)?;
     // typecheck_program(&mut compiler_cache)?;
 
     Ok(())
