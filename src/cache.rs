@@ -1,18 +1,42 @@
 use std::collections::HashMap;
 
-use crate::{
-    ast::ExprId,
-    types::Type,
-};
+use crate::{ast::Module, parser::Precedence};
 
 pub struct CompilerCache {
-    pub expr_type_map: HashMap<ExprId, Type>,
+    // Indexed by ModuleIds
+    pub modules: Vec<Module>,
+    // Indexed by DefinitionIds
+    pub definitions: Vec<Definition>,
+
+    // Maps operator name to operator precedence info
+    pub operator_precedences: HashMap<String, Precedence>,
 }
 
-impl CompilerCache {
-    pub fn new() -> CompilerCache {
-        CompilerCache {
-            expr_type_map: HashMap::new(),
+pub struct Definition {}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ModuleId(pub usize);
+
+#[derive(Clone, Debug)]
+pub struct DefinitionId(pub usize);
+
+macro_rules! impl_index {
+    ( $index_type:ty, $elem_type:ty, $field_name:ident ) => {
+        impl std::ops::Index<$index_type> for CompilerCache {
+            type Output = $elem_type;
+
+            fn index(&self, index: $index_type) -> &Self::Output {
+                &self.$field_name[index.0]
+            }
         }
-    }
+
+        impl std::ops::IndexMut<$index_type> for CompilerCache {
+            fn index_mut(&mut self, index: $index_type) -> &mut Self::Output {
+                &mut self.$field_name[index.0]
+            }
+        }
+    };
 }
+
+impl_index!(ModuleId, Module, modules);
+impl_index!(DefinitionId, Definition, definitions);

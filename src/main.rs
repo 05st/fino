@@ -1,10 +1,9 @@
-use std::{collections::HashMap, fs::read_to_string, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use cache::CompilerCache;
 use clap::Parser as _;
 use error::Error;
-use lexer::tokenize;
-use parser::Parser;
+use parser::parse_program;
 use resolver::resolve_program;
 use sorter::sort_program;
 use typechecker::typecheck_program;
@@ -33,64 +32,17 @@ struct Args {
     out: String,
 }
 
-fn get_module_name(root: &Path, file: &Path) -> Vec<String> {
-    if file == root {
-        vec![String::from(
-            file.with_extension("")
-                .file_name()
-                .expect("Failed to get file name")
-                .to_str()
-                .expect("Failed to convert OsStr to str"),
-        )]
-    } else {
-        file.with_extension("")
-            .to_path_buf()
-            .strip_prefix(root)
-            .expect("Failed to strip root path prefix")
-            .components()
-            .map(|c| {
-                String::from(
-                    c.as_os_str()
-                        .to_str()
-                        .expect("Failed to convert OsStr to str"),
-                )
-            })
-            .collect()
-    }
-}
-
 fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
-    let mut compiler_cache = CompilerCache::new();
+    let mut compiler_cache = CompilerCache {
+        modules: Vec::new(),
+        definitions: Vec::new(),
+        operator_precedences: HashMap::new(),
+    };
 
-    let mut operator_map = HashMap::new();
-    let mut parser_inputs = Vec::new();
-
-    // Tokenize all files and collect all operator declarations before parsing
-    for file in files {
-        let path = file.path();
-        let source = read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
-
-        let tokens = tokenize(&source, path.to_path_buf(), &mut operator_map)?;
-        parser_inputs.push((tokens, path.to_path_buf()));
-    }
-
-    let mut parser = Parser::new(operator_map);
-    let mut program = Vec::new();
-
-    for (tokens, path) in parser_inputs {
-        program.push(parser.parse_module(
-            tokens,
-            get_module_name(root, path.as_path()),
-            path,
-        )?);
-    }
-
-    sort_program(&mut program)?;
-    resolve_program(&mut program)?;
-    typecheck_program(&mut compiler_cache, &program)?;
-
-    println!("{:#?}", program);
-    println!("{:?}", compiler_cache.expr_type_map);
+    parse_program(&mut compiler_cache, files, root)?;
+    sort_program(&mut compiler_cache)?;
+    resolve_program(&mut compiler_cache)?;
+    // typecheck_program(&mut compiler_cache)?;
 
     Ok(())
 }

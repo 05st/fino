@@ -1,8 +1,10 @@
+// Topologically sort modules
+// create and assign module ids based on ordering
+
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Location, Module, ModuleId},
-    error::{Error, ErrorKind},
+    ast::{Location, Module}, cache::{CompilerCache, ModuleId}, error::{Error, ErrorKind}
 };
 
 enum ModuleState {
@@ -10,26 +12,25 @@ enum ModuleState {
     Processed,
 }
 
-struct ModuleSorter {
-    module_map: HashMap<ModuleId, Module>,
-    module_id_map: HashMap<Vec<String>, ModuleId>,
+struct ModuleSorter<'a> {
+    compiler_cache: &'a mut CompilerCache,
     module_state_map: HashMap<ModuleId, ModuleState>,
-    sorted_program: Vec<Module>,
+    sorted_modules: Vec<Module>,
 }
 
-impl ModuleSorter {
-    fn new(module_map: HashMap<ModuleId, Module>, module_id_map: HashMap<Vec<String>, ModuleId>) -> ModuleSorter {
+impl<'a> ModuleSorter<'a> {
+    fn new(compiler_cache: &'a mut CompilerCache) -> ModuleSorter {
         ModuleSorter {
-            module_map,
-            module_id_map,
+            compiler_cache,
             module_state_map: HashMap::new(),
-            sorted_program: Vec::new(),
+            sorted_modules: Vec::new(),
         }
     }
 
+    // Topological sort by DFS
     // TODO:
     // Recover and report the cycle when one is detected
-    fn dfs(&mut self, module_id: ModuleId, import_location: Option<&Location>) -> Result<(), Error> {
+    fn process_module(&mut self, module_id: ModuleId, import_location: Option<&Location>) -> Result<(), Error> {
         use ModuleState::*;
 
         match self.module_state_map.get(&module_id) {
@@ -40,43 +41,14 @@ impl ModuleSorter {
             None => self.module_state_map.insert(module_id.clone(), Processing),
         };
 
-        let module = self
-            .module_map
-            .remove(&module_id)
-            // Need to use ok_or_else() with a thunk since ok_or() is eagerly evaluated and
-            // will panic on the unwrap() when import_node_id is None for top-level dfs()
-            // calls.
-            .ok_or_else(|| Error::new(ErrorKind::UnknownModule, import_location.unwrap().clone()))?;
-
-        for import in &module.imports {
-            self.dfs(self.module_id_map[&import.module_name].clone(), Some(&import.location))?;
-        }
-
-        self.sorted_program.push(module);
-        self.module_state_map.insert(module_id.clone(), Processed);
-
         Ok(())
     }
 }
 
-pub fn sort_program(program: &mut Vec<Module>) -> Result<(), Error> {
-    let mut module_map = HashMap::new();
-    let mut module_id_map = HashMap::new();
-    let mut queue = Vec::new();
+pub fn sort_program(compiler_cache: &mut CompilerCache) -> Result<(), Error> {
+    let module_sorter = ModuleSorter::new(compiler_cache);
 
-    // Move all modules to module_name_map
-    while let Some(module) = program.pop() {
-        queue.push(module.module_id.clone());
-        module_id_map.insert(module.module_name.clone(), module.module_id.clone());
-        module_map.insert(module.module_id.clone(), module);
-    }
-
-    let mut sorter = ModuleSorter::new(module_map, module_id_map);
-    for module_id in queue {
-        sorter.dfs(module_id, None)?;
-    }
-
-    *program = sorter.sorted_program;
+    compiler_cache.modules = module_sorter.sorted_modules;
 
     Ok(())
 }

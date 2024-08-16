@@ -1,6 +1,6 @@
 use std::{ops::Range, path::PathBuf};
 
-use crate::types::*;
+use crate::{cache::{DefinitionId, ModuleId}, types::*};
 
 pub type Span = Range<usize>;
 
@@ -15,21 +15,6 @@ impl Location {
         Location { path, span }
     }
 }
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct DefId(pub usize);
-
-impl Default for DefId {
-    fn default() -> DefId {
-        DefId(0)
-    }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct ExprId(pub usize);
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct ModuleId(pub usize);
 
 // A qualified name contains the entire path to the name. For example,
 // 'abc::xyz::func' is a qualified name. An unqualified name would just be
@@ -54,25 +39,25 @@ pub enum Lit {
 pub enum ExprKind {
     Lit(Lit),
     Var {
-        def_id: DefId,
         // A variable can be a qualified or unqualified name. A variable written as a
         // qualified names can only refer to a top-level definition.
         name: Name,
+        definition_id: Option<DefinitionId>,
     },
     App {
         fun: Box<Expr>,
         arg: Box<Expr>,
     },
     Lam {
-        param_def_id: DefId,
-        param: String,
+        param_name: String,
         body: Box<Expr>,
+        param_definition_id: Option<DefinitionId>,
     },
     Let {
-        def_id: DefId,
         name: String,
         expr: Box<Expr>,
         body: Box<Expr>,
+        definition_id: Option<DefinitionId>,
     },
     If {
         cond: Box<Expr>,
@@ -83,9 +68,8 @@ pub enum ExprKind {
 
 #[derive(Debug)]
 pub struct Expr {
-    pub expr_id: ExprId,
-    pub location: Location,
     pub kind: ExprKind,
+    pub location: Location,
 }
 
 // An item is a top-level let-definition. Fn definitions are desugared into curried
@@ -93,31 +77,32 @@ pub struct Expr {
 // given by module name ++ name;
 #[derive(Debug)]
 pub struct Item {
-    pub location: Location,
-    pub def_id: DefId,
     pub name: String,
-    pub scheme: TypeScheme,
+    pub type_scheme: TypeScheme,
     pub expr: Expr,
+    pub location: Location,
+    pub definition_id: Option<DefinitionId>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Import {
+    pub module_path: Vec<String>,
     pub location: Location,
-    // Fully qualified name of module
-    pub module_name: Vec<String>,
+    pub module_id: Option<ModuleId>,
 }
 
 #[derive(Debug)]
 pub enum Export {
     Item {
-        location: Location,
-        def_id: DefId,
         item_name: String,
+        location: Location,
+        definition_id: Option<DefinitionId>,
+
     },
     Module {
+        module_path: Vec<String>,
         location: Location,
-        // Fully qualified name of module
-        module_name: Vec<String>,
+        module_id: Option<ModuleId>,
     },
 }
 
@@ -125,16 +110,15 @@ pub enum Export {
 // to the programmer to ensure the function exists.
 #[derive(Debug)]
 pub struct Extern {
-    pub location: Location,
-    pub def_id: DefId,
     pub name: String,
-    pub scheme: TypeScheme,
+    pub type_scheme: TypeScheme,
+    pub location: Location,
+    pub definition_id: Option<DefinitionId>,
 }
 
 #[derive(Debug)]
 pub struct Module {
-    pub module_id: ModuleId,
-    pub module_name: Vec<String>,
+    pub module_path: Vec<String>,
     pub imports: Vec<Import>,
     pub exports: Vec<Export>,
     pub externs: Vec<Extern>,

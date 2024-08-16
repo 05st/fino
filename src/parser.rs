@@ -1,10 +1,9 @@
-use std::{collections::{BTreeSet, HashMap, VecDeque}, ops::Range, path::PathBuf};
+use std::{collections::{BTreeSet, VecDeque}, fs::read_to_string, ops::Range, path::{Path, PathBuf}};
+
+use walkdir::DirEntry;
 
 use crate::{
-    ast::*,
-    error::{Error, ErrorKind},
-    lexer::Token,
-    types::{Type, TypeScheme, TypeVar},
+    ast::*, cache::CompilerCache, error::{Error, ErrorKind}, lexer::{tokenize, Token}, types::{Type, TypeScheme, TypeVar}
 };
 
 pub enum Precedence {
@@ -13,15 +12,12 @@ pub enum Precedence {
     Postfix(u8),
 }
 
-pub struct Parser {
+pub struct Parser<'a> {
+    compiler_cache: &'a mut CompilerCache,
+
     tokens: VecDeque<(Token, Span)>,
     previous: Option<(Token, Span)>,
     filepath: PathBuf,
-
-    operator_map: HashMap<String, Precedence>,
-
-    expr_id_count: usize,
-    module_id_count: usize,
 }
 
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
@@ -39,15 +35,13 @@ macro_rules! expected_one_of {
     };
 }
 
-impl Parser {
-    pub fn new(operator_map: HashMap<String, Precedence>) -> Parser {
+impl<'a> Parser<'a> {
+    pub fn new(compiler_cache: &'a mut CompilerCache) -> Parser {
         Parser {
+            compiler_cache,
             tokens: VecDeque::new(),
             previous: None,
             filepath: PathBuf::new(),
-            operator_map,
-            expr_id_count: 0,
-            module_id_count: 0,
         }
     }
 
@@ -60,12 +54,6 @@ impl Parser {
         // otherwise .unwrap() will panic
         self.tokens.push_front(self.previous.to_owned().unwrap());
         self.previous = None;
-    }
-
-    fn new_expr_id(&mut self) -> ExprId {
-        let expr_id = ExprId(self.expr_id_count);
-        self.expr_id_count += 1;
-        expr_id
     }
 
     // Insert node id to location mapping into compiler cache
@@ -238,12 +226,11 @@ impl Parser {
 
         Ok(Expr {
             location: self.make_location(let_span),
-            expr_id: self.new_expr_id(),
             kind: ExprKind::Let {
-                def_id: DefId::default(),
                 name,
                 expr: Box::new(expr),
                 body: Box::new(body),
+                definition_id: None,
             },
         })
     }
@@ -261,13 +248,12 @@ impl Parser {
         let fexpr = self.parse_expr()?;
 
         Ok(Expr {
-            location: self.make_location(if_span),
-            expr_id: self.new_expr_id(),
             kind: ExprKind::If {
                 cond: Box::new(cond),
                 texpr: Box::new(texpr),
                 fexpr: Box::new(fexpr),
             },
+            location: self.make_location(if_span),
         })
     }
 
@@ -297,49 +283,42 @@ impl Parser {
                 };
 
                 Ok(Expr {
-                    location: self.make_location(span),
-                    expr_id: self.new_expr_id(),
                     kind: ExprKind::Var {
-                        def_id: DefId::default(),
-                        name: name,
+                        name,
+                        definition_id: None,
                     },
+                    location: self.make_location(span),
                 })
             }
 
             Token::LitBool(b) => Ok(Expr {
-                location: self.make_location(span),
-                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lit(Lit::Bool(b)),
+                location: self.make_location(span),
             }),
 
             Token::LitInteger(i) => Ok(Expr {
-                location: self.make_location(span),
-                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lit(Lit::Int(i)),
+                location: self.make_location(span),
             }),
 
             Token::LitFloat(f) => Ok(Expr {
-                location: self.make_location(span),
-                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lit(Lit::Float(f)),
+                location: self.make_location(span),
             }),
 
             Token::LitString(s) => Ok(Expr {
-                location: self.make_location(span),
-                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lit(Lit::String(s)),
+                location: self.make_location(span),
             }),
 
             Token::LitChar(c) => Ok(Expr {
-                location: self.make_location(span),
-                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lit(Lit::Char(c)),
+                location: self.make_location(span),
             }),
 
             Token::LitUnit => Ok(Expr {
-                location: self.make_location(span),
-                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lit(Lit::Unit),
+                location: self.make_location(span),
             }),
 
             other => Err((true, self.make_error(expected_one_of!(other, "identifier", "literal", "'('"), span)))
@@ -357,12 +336,11 @@ impl Parser {
             match self.parse_atom() {
                 Ok(arg_expr) => {
                     result = Expr {
-                        location: self.make_location(arg_span),
-                        expr_id: self.new_expr_id(),
                         kind: ExprKind::App {
                             fun: Box::new(result),
                             arg: Box::new(arg_expr),
-                        }
+                        },
+                        location: self.make_location(arg_span),
                     };
                 }
                 Err((false, err)) => return Err(err),
@@ -379,47 +357,42 @@ impl Parser {
     }
 
     // Desugar unary operator application
-    fn unary_oper(&mut self, oper: String, location: Location, expr: Expr) -> Expr {
+    fn unary_oper(oper: String, location: Location, expr: Expr) -> Expr {
         Expr {
-            location: location.clone(),
-            expr_id: self.new_expr_id(),
             kind: ExprKind::App {
                 fun: Box::new(Expr {
-                    location,
-                    expr_id: self.new_expr_id(),
                     kind: ExprKind::Var {
-                        def_id: DefId::default(),
+                        definition_id: None,
                         name: Name::Unqualified(oper),
                     },
+                    location: location.clone(),
                 }),
                 arg: Box::new(expr),
-            }
+            },
+            location,
         }
     }
 
     // Desugar binary operator application
-    fn binary_oper(&mut self, oper: String, location: Location, left: Expr, right: Expr) -> Expr {
+    fn binary_oper(oper: String, location: Location, left: Expr, right: Expr) -> Expr {
         Expr {
-            location: location.clone(),
-            expr_id: self.new_expr_id(),
             kind: ExprKind::App {
                 fun: Box::new(Expr {
-                    location: location.clone(),
-                    expr_id: self.new_expr_id(),
                     kind: ExprKind::App {
                         fun: Box::new(Expr {
-                            location,
-                            expr_id: self.new_expr_id(),
                             kind: ExprKind::Var {
-                                def_id: DefId::default(),
                                 name: Name::Unqualified(oper),
+                                definition_id: None,
                             },
+                            location: location.clone(),
                         }),
                         arg: Box::new(left),
                     },
+                    location: location.clone(),
                 }),
                 arg: Box::new(right),
             },
+            location,
         }
     }
 
@@ -427,9 +400,9 @@ impl Parser {
     fn parse_oper_expr(&mut self, min_prec: u8) -> Result<Expr, Error> {
         let mut lhs = match self.next_with_span() {
             (Token::Operator(oper), span) => {
-                if let Some(Precedence::Prefix(right_prec)) = self.operator_map.get(&oper) {
+                if let Some(Precedence::Prefix(right_prec)) = self.compiler_cache.operator_precedences.get(&oper) {
                     let expr = self.parse_oper_expr(*right_prec)?;
-                    self.unary_oper(oper, self.make_location(self.span()), expr)
+                    Parser::unary_oper(oper, self.make_location(self.span()), expr)
                 } else {
                     return self.error(ErrorKind::InvalidPrefixOperator(oper), span);
                 }
@@ -448,7 +421,8 @@ impl Parser {
                 _ => break,
             };
 
-            let prec = self.operator_map
+            let prec = self.compiler_cache
+                .operator_precedences
                 .get(&oper)
                 .ok_or(self.make_error(ErrorKind::UndeclaredOperator(oper.clone()), self.span()))?;
 
@@ -458,7 +432,7 @@ impl Parser {
                 }
                 let (_, span) = self.next_with_span();
 
-                lhs = self.unary_oper(oper, self.make_location(span), lhs);
+                lhs = Parser::unary_oper(oper, self.make_location(span), lhs);
                 continue;
             }
 
@@ -469,7 +443,7 @@ impl Parser {
                 let (_, span) = self.next_with_span();
 
                 let rhs = self.parse_oper_expr(right_prec)?;
-                lhs = self.binary_oper(oper, self.make_location(span), lhs, rhs,);
+                lhs = Parser::binary_oper(oper, self.make_location(span), lhs, rhs,);
                 continue;
             }
 
@@ -496,7 +470,7 @@ impl Parser {
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
-        let scheme = self.parse_type_scheme()?;
+        let type_scheme = self.parse_type_scheme()?;
 
         self.expect(Token::Indent)?;
 
@@ -525,21 +499,20 @@ impl Parser {
         let expr = params
             .into_iter()
             .fold(body, |child, (param_name, span)| Expr {
-                location: self.make_location(span),
-                expr_id: self.new_expr_id(),
                 kind: ExprKind::Lam {
-                    param_def_id: DefId::default(),
-                    param: param_name,
+                    param_name,
                     body: Box::new(child),
+                    param_definition_id: None,
                 },
+                location: self.make_location(span),
             });
 
         Ok(Item {
-            location: self.make_location(span),
             name,
-            def_id: DefId::default(),
-            scheme,
+            type_scheme,
             expr,
+            location: self.make_location(span),
+            definition_id: None,
         })
     }
 
@@ -551,7 +524,7 @@ impl Parser {
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
-        let scheme = self.parse_type_scheme()?;
+        let type_scheme = self.parse_type_scheme()?;
 
         self.expect(Token::Equal)?;
         let expr = self.parse_expr()?;
@@ -559,11 +532,11 @@ impl Parser {
         self.expect(Token::Newline)?;
 
         Ok(Item {
-            location: self.make_location(span),
             name,
-            def_id: DefId::default(),
-            scheme,
+            type_scheme,
             expr,
+            location: self.make_location(span),
+            definition_id: None,
         })
     }
 
@@ -571,12 +544,13 @@ impl Parser {
         let span = self.span();
         self.expect(Token::KwImport)?;
 
-        let module_name = self.parse_separated_name()?;
+        let module_path = self.parse_separated_name()?;
         self.expect(Token::Newline)?;
 
         Ok(Import {
+            module_path,
             location: self.make_location(span),
-            module_name,
+            module_id: None,
         })
     }
 
@@ -588,14 +562,15 @@ impl Parser {
             self.next();
 
             Export::Module {
+                module_path: self.parse_separated_name()?,
                 location: self.make_location(span),
-                module_name: self.parse_separated_name()?,
+                module_id: None,
             }
         } else {
             Export::Item {
-                location: self.make_location(span),
-                def_id: DefId::default(),
                 item_name: self.expect_identifier()?,
+                location: self.make_location(span),
+                definition_id: None,
             }
         };
 
@@ -610,19 +585,19 @@ impl Parser {
         let name = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
-        let scheme = self.parse_type_scheme()?;
+        let type_scheme = self.parse_type_scheme()?;
 
         self.expect(Token::Newline)?;
 
         Ok(Extern {
-            location: self.make_location(span),
-            def_id: DefId::default(),
             name,
-            scheme,
+            type_scheme,
+            location: self.make_location(span),
+            definition_id: None,
         })
     }
 
-    pub fn parse_module(&mut self, tokens: Vec<(Token, Span)>, module_name: Vec<String>, filepath: PathBuf) -> Result<Module, Error> {
+    pub fn parse_module(&mut self, tokens: Vec<(Token, Span)>, module_path: Vec<String>, filepath: PathBuf) -> Result<(), Error> {
         self.tokens = VecDeque::from(tokens);
         self.filepath = filepath;
 
@@ -655,16 +630,62 @@ impl Parser {
             }
         }
 
-        let module_id = ModuleId(self.module_id_count);
-        self.module_id_count += 1;
-
-        Ok(Module {
-            module_id,
-            module_name,
+        self.compiler_cache.modules.push(Module {
+            module_path,
             externs,
             imports,
             exports,
             items,
-        })
+        });
+        
+        Ok(())
     }
+}
+
+fn get_module_path(root: &Path, file: &Path) -> Vec<String> {
+    if file == root {
+        vec![String::from(
+            file.with_extension("")
+                .file_name()
+                .expect("Failed to get file name")
+                .to_str()
+                .expect("Failed to convert OsStr to str"),
+        )]
+    } else {
+        file.with_extension("")
+            .to_path_buf()
+            .strip_prefix(root)
+            .expect("Failed to strip root path prefix")
+            .components()
+            .map(|c| {
+                String::from(
+                    c.as_os_str()
+                        .to_str()
+                        .expect("Failed to convert OsStr to str"),
+                )
+            })
+            .collect()
+    }
+}
+
+pub fn parse_program(compiler_cache: &mut CompilerCache, files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
+    let mut lexer_output = Vec::new();
+    for file in files {
+        let path = file.path();
+        let source = read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
+
+        let tokens = tokenize(&source, path.to_path_buf(), &mut compiler_cache.operator_precedences)?;
+        lexer_output.push((tokens, path.to_path_buf()));
+    }
+
+    let mut parser = Parser::new(compiler_cache);
+    for (tokens, path) in lexer_output {
+        parser.parse_module(
+            tokens,
+            get_module_path(root, path.as_path()),
+            path,
+        )?;
+    }
+
+    Ok(())
 }
