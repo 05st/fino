@@ -22,7 +22,7 @@ pub struct Definition {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ModuleId(pub usize);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct DefinitionId(pub usize);
 
 macro_rules! impl_index {

@@ -66,7 +66,7 @@ impl Environment {
     fn lookup_qualified_name(&self, name: &Vec<String>, location: &Location) -> Result<DefinitionId, Error> {
         match self.items.get(name) {
             Some(definition_id) => Ok(definition_id.clone()),
-            None => Err(Error::new(ErrorKind::UnknownVariable(Name::Qualified(name.clone())), location.clone())),
+            None => Err(Error::new(ErrorKind::UnknownVariable(name.clone()), location.clone())),
         }
     }
 
@@ -93,7 +93,7 @@ impl Environment {
             Err(Error::new(ErrorKind::MultipleDefinitions(name.clone()), location.clone()))
         } else if num_candidates == 0 {
             // If there are no possible definitions, throw an error
-            Err(Error::new(ErrorKind::UnknownVariable(Name::Unqualified(name.clone())), location.clone()))
+            Err(Error::new(ErrorKind::UnknownVariable(vec![name.clone()]), location.clone()))
         } else {
             Ok(candidates.first().unwrap().1.clone())
         }

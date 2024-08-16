@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ena::unify::InPlaceUnificationTable;
 
 use crate::ast::*;
-use crate::cache::CompilerCache;
+use crate::cache::{CompilerCache, DefinitionId};
 use crate::error::{Error, ErrorKind};
 use crate::types::*;
 
@@ -14,8 +14,8 @@ enum Constraint {
 
 struct TypeChecker<'a> {
     compiler_cache: &'a mut CompilerCache,
-    item_scheme_map: HashMap<DefId, TypeScheme>,
     unification_table: InPlaceUnificationTable<TypeUniVar>,
+    type_schemes: HashMap<DefinitionId, TypeScheme>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -23,7 +23,7 @@ impl<'a> TypeChecker<'a> {
         TypeChecker {
             compiler_cache,
             unification_table: InPlaceUnificationTable::new(),
-            item_scheme_map: HashMap::new(),
+            type_schemes: HashMap::new(),
         }
     }
 
@@ -31,15 +31,9 @@ impl<'a> TypeChecker<'a> {
         self.unification_table.new_key(None)
     }
 
-    fn cache_expr_type(&mut self, expr_id: &ExprId, expr_type: &Type) {
-        self.compiler_cache
-            .expr_type_map
-            .insert(expr_id.clone(), expr_type.clone());
-    }
-
     // Infer (synthesize) expression type. Only one of infer_expr or check_expr
     // should ever be called on an expression
-    fn infer_expr(&mut self, env: im::HashMap<DefId, Type>, expr: &Expr) -> (Vec<Constraint>, Type) {
+    fn infer_expr(&mut self, env: im::HashMap<DefinitionId, Type>, expr: &Expr) -> (Vec<Constraint>, Type) {
         let (constraints, expr_type) = match &expr.kind {
             ExprKind::Lit(literal) => {
                 (
@@ -55,14 +49,14 @@ impl<'a> TypeChecker<'a> {
                 )
             }
 
-            ExprKind::Var { def_id, name: _ } => {
+            ExprKind::Var { name: _, definition_id } => {
                 // Variable is guaranteed to be defined after name resolution, either in the
                 // local scope or as a top-level definition.
-                let var_type = match env.get(&def_id) {
+                let var_type = match env.get(&definition_id.as_ref().unwrap()) {
                     Some(ty) => ty.clone(),
                     None => {
                         // Instantiate type scheme
-                        let scheme = &self.item_scheme_map[&def_id].clone();
+                        let scheme = &self.type_schemes[&definition_id.as_ref().unwrap()].clone();
                         let subst = scheme.0
                             .iter()
                             .map(|tvar| (Type::Var(tvar.clone()), Type::UniVar(self.fresh_uni_var())))
@@ -74,9 +68,9 @@ impl<'a> TypeChecker<'a> {
                 (Vec::new(), var_type)
             }
 
-            ExprKind::Lam { param_def_id, param: _, body } => {
+            ExprKind::Lam { param_name: _, body, param_definition_id } => {
                 let param_uvar = self.fresh_uni_var();
-                let new_env = env.update(param_def_id.clone(), Type::UniVar(param_uvar));
+                let new_env = env.update(param_definition_id.as_ref().unwrap().clone(), Type::UniVar(param_uvar));
 
                 let (body_constraints, body_type) = self.infer_expr(new_env, &body);
                 (
@@ -98,9 +92,9 @@ impl<'a> TypeChecker<'a> {
                 )
             }
 
-            ExprKind::Let { def_id, name: _, expr, body } => {
-                let (expr_constraints, def_type) = self.infer_expr(env.clone(), &expr);
-                let new_env = env.update(def_id.clone(), def_type);
+            ExprKind::Let { name: _, aexpr, body, definition_id } => {
+                let (expr_constraints, def_type) = self.infer_expr(env.clone(), &aexpr);
+                let new_env = env.update(definition_id.as_ref().unwrap().clone(), def_type);
                 let (body_constraints, body_type) = self.infer_expr(new_env, &body);
 
                 (
@@ -126,8 +120,6 @@ impl<'a> TypeChecker<'a> {
             }
         };
 
-        self.cache_expr_type(&expr.expr_id, &expr_type);
-
         (constraints, expr_type)
     }
 
@@ -136,9 +128,7 @@ impl<'a> TypeChecker<'a> {
     // constraint.
     // TODO:
     // We can probably pass expected_type as a reference here
-    fn check_expr(&mut self, env: im::HashMap<DefId, Type>, expr: &Expr, expected_type: Type) -> Vec<Constraint> {
-        self.cache_expr_type(&expr.expr_id, &expected_type);
-
+    fn check_expr(&mut self, env: im::HashMap<DefinitionId, Type>, expr: &Expr, expected_type: Type) -> Vec<Constraint> {
         match (&expr.kind, expected_type) {
             (ExprKind::Lit(Lit::Int(_)), t) if t == Type::i32() => Vec::new(),
             (ExprKind::Lit(Lit::Float(_)), t) if t == Type::f32() => Vec::new(),
@@ -147,8 +137,8 @@ impl<'a> TypeChecker<'a> {
             (ExprKind::Lit(Lit::Bool(_)), t) if t == Type::bool() => Vec::new(),
             (ExprKind::Lit(Lit::Unit), t) if t == Type::unit() => Vec::new(),
 
-            (ExprKind::Lam { param_def_id, param: _, body }, Type::Fun(param_type, ret_type)) => {
-                let new_env = env.update(param_def_id.clone(), *param_type);
+            (ExprKind::Lam { param_name: _, body, param_definition_id }, Type::Fun(param_type, ret_type)) => {
+                let new_env = env.update(param_definition_id.as_ref().unwrap().clone(), *param_type);
                 self.check_expr(new_env, &body, *ret_type)
             }
 
@@ -238,18 +228,14 @@ impl<'a> TypeChecker<'a> {
         }
         Ok(())
     }
-}
 
-pub fn typecheck_program(compiler_cache: &mut CompilerCache, program: &Vec<Module>) -> Result<(), Error> {
-    let mut typechecker = TypeChecker::new(compiler_cache);
-
-    for module in program {
+    fn typecheck_module(&mut self, module: &Module) -> Result<(), Error> {
         // Insert all top-level definitions into item_scheme_map
         for ext in &module.externs {
-            typechecker.item_scheme_map.insert(ext.def_id.clone(), ext.scheme.clone());
+            self.type_schemes.insert(ext.definition_id.as_ref().unwrap().clone(), ext.type_scheme.clone());
         }
         for item in &module.items {
-            typechecker.item_scheme_map.insert(item.def_id.clone(), item.scheme.clone());
+            self.type_schemes.insert(item.definition_id.as_ref().unwrap().clone(), item.type_scheme.clone());
         }
 
         // Typecheck top-level definitions
@@ -257,20 +243,27 @@ pub fn typecheck_program(compiler_cache: &mut CompilerCache, program: &Vec<Modul
             // MAYBE BUG:
             // Not exactly sure what reset_unifications does. Maybe we should just set
             // unification_table to InPlaceUnificationTable::new() instead?
-            typechecker.unification_table.reset_unifications(|_| None);
+            self.unification_table.reset_unifications(|_| None);
 
-            let constraints = typechecker.check_expr(im::HashMap::new(), &item.expr, item.scheme.1.clone());
-            typechecker.solve_constraints(constraints)?;
-
-            // Normalize expr_type_map after constraints have been solved
-            // TODO:
-            // Find a better way to do this
-            let expr_type_map = typechecker.compiler_cache.expr_type_map.clone();
-            typechecker.compiler_cache.expr_type_map = expr_type_map
-                .into_iter()
-                .map(|(k, v)| (k, typechecker.normalize_type(v)))
-                .collect::<HashMap<_, _>>();
+            let constraints = self.check_expr(im::HashMap::new(), &item.expr, item.type_scheme.1.clone());
+            self.solve_constraints(constraints)?;
         }
+
+        Ok(())
+    }
+}
+
+pub fn typecheck_program(compiler_cache: &mut CompilerCache) -> Result<(), Error> {
+    let mut typechecker = TypeChecker::new(compiler_cache);
+
+    let mut queue = Vec::new();
+    while let Some(module) = typechecker.compiler_cache.modules.pop_front() {
+        typechecker.typecheck_module(&module)?;
+        queue.push(module);
+    }
+
+    while let Some(module) = queue.pop() {
+        typechecker.compiler_cache.modules.push_front(module);
     }
 
     Ok(())
