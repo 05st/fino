@@ -1,9 +1,17 @@
-use std::{collections::{BTreeSet, VecDeque}, fs::read_to_string, ops::Range, path::{Path, PathBuf}};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    fs::read_to_string,
+    ops::Range, path::{Path, PathBuf}
+};
 
 use walkdir::DirEntry;
 
 use crate::{
-    ast::*, cache::CompilerCache, error::{Error, ErrorKind}, lexer::{tokenize, Token}, types::{Type, TypeScheme, TypeVar}
+    ast::*,
+    cache::CompilerCache,
+    error::{Error, ErrorKind},
+    lexer::{tokenize, Token},
+    types::{Type, TypeScheme, TypeVar}
 };
 
 pub enum Precedence {
@@ -12,9 +20,8 @@ pub enum Precedence {
     Postfix(u8),
 }
 
-pub struct Parser<'a> {
+struct Parser<'a> {
     compiler_cache: &'a mut CompilerCache,
-
     tokens: VecDeque<(Token, Span)>,
     previous: Option<(Token, Span)>,
     filepath: PathBuf,
@@ -636,6 +643,7 @@ impl<'a> Parser<'a> {
             imports,
             exports,
             items,
+            module_id: None,
         });
         
         Ok(())

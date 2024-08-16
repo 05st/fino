@@ -123,4 +123,5 @@ pub struct Module {
     pub exports: Vec<Export>,
     pub externs: Vec<Extern>,
     pub items: Vec<Item>,
+    pub module_id: Option<ModuleId>,
 }

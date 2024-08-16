@@ -2,14 +2,16 @@ use std::collections::HashMap;
 
 use crate::{ast::Module, parser::Precedence};
 
+#[derive(Default)]
 pub struct CompilerCache {
     // Indexed by ModuleIds
     pub modules: Vec<Module>,
     // Indexed by DefinitionIds
     pub definitions: Vec<Definition>,
-
     // Maps operator name to operator precedence info
     pub operator_precedences: HashMap<String, Precedence>,
+    // Maps module path to module id
+    pub module_ids: HashMap<Vec<String>, ModuleId>,
 }
 
 pub struct Definition {}

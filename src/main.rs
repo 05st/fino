@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 use cache::CompilerCache;
 use clap::Parser as _;
@@ -6,7 +6,7 @@ use error::Error;
 use parser::parse_program;
 use resolver::resolve_program;
 use sorter::sort_program;
-use typechecker::typecheck_program;
+// use typechecker::typecheck_program;
 use walkdir::{DirEntry, WalkDir};
 
 mod ast;
@@ -16,7 +16,7 @@ mod lexer;
 mod parser;
 mod resolver;
 mod sorter;
-mod typechecker;
+// mod typechecker;
 mod types;
 
 const FINO_FILE_EXTENSION: &str = ".fn";
@@ -33,15 +33,12 @@ struct Args {
 }
 
 fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
-    let mut compiler_cache = CompilerCache {
-        modules: Vec::new(),
-        definitions: Vec::new(),
-        operator_precedences: HashMap::new(),
-    };
+    let mut compiler_cache = CompilerCache::default();
 
     parse_program(&mut compiler_cache, files, root)?;
     sort_program(&mut compiler_cache)?;
-    resolve_program(&mut compiler_cache)?;
+    println!("{:#?}", compiler_cache.modules);
+    // resolve_program(&mut compiler_cache)?;
     // typecheck_program(&mut compiler_cache)?;
 
     Ok(())
