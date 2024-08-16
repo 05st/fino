@@ -40,9 +40,7 @@ impl<'a> ModuleSorter<'a> {
         }
     }
 
-    // Topological sort by DFS
-    // TODO:
-    // Recover and report the cycle when one is detected
+    // Topological sort by depth-first-search
     fn process_module(&mut self, module_path: Vec<String>, import_location: Option<Location>) -> Result<ModuleId, Error> {
         use ModuleState::*;
 
@@ -55,7 +53,12 @@ impl<'a> ModuleSorter<'a> {
         };
 
         // The module hasn't begun processing yet, so it should be in self.module_map
-        let mut module = self.module_map.remove(&module_path).unwrap();
+        // otherwise, it means an undefined module was attempted to be imported
+        // Note we use a thunk with ok_or_else since ok_or is eagerly evaluated and
+        // panics for base calls of process_module when import_location is None
+        let mut module = self.module_map
+            .remove(&module_path)
+            .ok_or_else(|| Error::new(ErrorKind::UnknownModule, import_location.unwrap().clone()))?;
 
         for import in module.imports.iter_mut() {
             import.module_id = Some(self.process_module(import.module_path.clone(), Some(import.location.clone()))?);
