@@ -7,7 +7,6 @@ use parser::parse_program;
 use resolver::resolve_program;
 use sorter::sort_program;
 use typechecker::typecheck_program;
-// use typechecker::typecheck_program;
 use walkdir::{DirEntry, WalkDir};
 
 mod ast;

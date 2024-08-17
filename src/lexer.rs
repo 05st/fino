@@ -97,6 +97,8 @@ pub enum Token {
     Bar,
     #[token(":")]
     Colon,
+    #[token("\\")]
+    Backslash,
     #[token("->")]
     SmallArrow,
     #[token("=>")]
@@ -255,6 +257,7 @@ impl Display for Token {
             Token::Equal => write!(f, "'='"),
             Token::Bar => write!(f, "'|'"),
             Token::Colon => write!(f, "':'"),
+            Token::Backslash => write!(f, "'\\'"),
             Token::SmallArrow => write!(f, "'->'"),
             Token::BigArrow => write!(f, "'=>'"),
             Token::Dot => write!(f, "'.'"),

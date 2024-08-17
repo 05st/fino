@@ -264,6 +264,41 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_lam_expr(&mut self) -> Result<Expr, Error> {
+        self.expect(Token::Backslash)?;
+        
+        let mut params = Vec::new();
+        loop {
+            let (token, span) = self.next_with_span();
+            match token {
+                Token::LowerIdentifier(param) | Token::UpperIdentifier(param) => {
+                    params.push((param, span))
+                }
+                Token::SmallArrow => break,
+                other => return self.error(expected_one_of!(other, "identifier", "'->'"), span),
+            }
+        }
+
+        let body = self.parse_expr()?;
+
+        // Reverse for proper fold direction
+        params.reverse();
+
+        // Desugar function into definition with curried lambdas
+        let expr = params
+            .into_iter()
+            .fold(body, |child, (param_name, span)| Expr {
+                kind: ExprKind::Lam {
+                    param_name,
+                    body: Box::new(child),
+                    param_definition_id: None,
+                },
+                location: self.make_location(span),
+            });
+
+        Ok(expr)
+    }
+
     // Parse expression atom (i.e. literal, variable, parenthesized expression)
     // The error type contains a bool which is true if zero tokens were matched
     // which is useful for parse_app() to know if it should go through and 
@@ -465,6 +500,7 @@ impl<'a> Parser<'a> {
         match self.peek() {
             Token::KwLet => self.parse_let_expr(),
             Token::KwIf => self.parse_if_expr(),
+            Token::Backslash => self.parse_lam_expr(),
             _ => self.parse_oper_expr(0),
         }
     }

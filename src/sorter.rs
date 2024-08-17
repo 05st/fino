@@ -53,12 +53,12 @@ impl<'a> ModuleSorter<'a> {
         };
 
         // The module hasn't begun processing yet, so it should be in self.module_map
-        // otherwise, it means an undefined module was attempted to be imported
+        // otherwise, it means an undefined module was attempted to be imported.
         // Note we use a thunk with ok_or_else since ok_or is eagerly evaluated and
-        // panics for base calls of process_module when import_location is None
+        // panics for base calls of process_module when import_location is None.
         let mut module = self.module_map
             .remove(&module_path)
-            .ok_or_else(|| Error::new(ErrorKind::UnknownModule, import_location.unwrap().clone()))?;
+            .ok_or_else(|| Error::new(ErrorKind::UnknownModule(module_path.clone()), import_location.unwrap().clone()))?;
 
         for import in module.imports.iter_mut() {
             import.module_id = Some(self.process_module(import.module_path.clone(), Some(import.location.clone()))?);

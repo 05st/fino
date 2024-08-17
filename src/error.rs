@@ -18,7 +18,7 @@ pub enum ErrorKind {
 
     // Module sort errors
     CircularDependency,
-    UnknownModule,
+    UnknownModule(Vec<String>),
 
     // Name resolution errors
     UnknownVariable(Vec<String>),
@@ -78,7 +78,7 @@ impl Display for ErrorKind {
             InvalidPrefixOperator(oper) => write!(f, "Invalid prefix operator {}", oper),
 
             CircularDependency => write!(f, "Modules have a circular dependency"),
-            UnknownModule => write!(f, "Could not find module"),
+            UnknownModule(module_path) => write!(f, "Could not find module {}", module_path.join(".")),
 
             UnknownVariable(name) => write!(f, "Unknown variable {}", name.join(".")),
             Redefinition(qual) => write!(f, "{} is already defined", qual.join(".")),
