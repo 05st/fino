@@ -5,6 +5,7 @@ use ena::unify::InPlaceUnificationTable;
 use crate::ast::*;
 use crate::cache::{CompilerCache, DefinitionId};
 use crate::error::{Error, ErrorKind};
+use crate::literal::Literal;
 use crate::location::Location;
 use crate::types::*;
 
@@ -40,12 +41,12 @@ impl<'a> TypeChecker<'a> {
                 (
                     Vec::new(),
                     match literal {
-                        Lit::Int(_) => Type::i32(),
-                        Lit::Float(_) => Type::f32(),
-                        Lit::String(_) => Type::str(),
-                        Lit::Char(_) => Type::char(),
-                        Lit::Bool(_) => Type::bool(),
-                        Lit::Unit => Type::unit(),
+                        Literal::Int(_) => Type::int(),
+                        Literal::Float(_) => Type::float(),
+                        Literal::String(_) => Type::str(),
+                        Literal::Char(_) => Type::char(),
+                        Literal::Bool(_) => Type::bool(),
+                        Literal::Unit => Type::unit(),
                     }
                 )
             }
@@ -71,7 +72,7 @@ impl<'a> TypeChecker<'a> {
 
             ExprKind::Lam { param_name: _, body, param_definition_id } => {
                 let param_uvar = self.fresh_uni_var();
-                let new_env = env.update(param_definition_id.as_ref().unwrap().clone(), Type::UniVar(param_uvar));
+                let new_env = env.update(param_definition_id.clone().unwrap(), Type::UniVar(param_uvar));
 
                 let (body_constraints, body_type) = self.infer_expr(new_env, &body);
                 (
@@ -95,7 +96,7 @@ impl<'a> TypeChecker<'a> {
 
             ExprKind::Let { name: _, aexpr, body, definition_id } => {
                 let (expr_constraints, def_type) = self.infer_expr(env.clone(), &aexpr);
-                let new_env = env.update(definition_id.as_ref().unwrap().clone(), def_type);
+                let new_env = env.update(definition_id.clone().unwrap(), def_type);
                 let (body_constraints, body_type) = self.infer_expr(new_env, &body);
 
                 (
@@ -131,15 +132,15 @@ impl<'a> TypeChecker<'a> {
     // We can probably pass expected_type as a reference here
     fn check_expr(&mut self, env: im::HashMap<DefinitionId, Type>, expr: &Expr, expected_type: Type) -> Vec<Constraint> {
         match (&expr.kind, expected_type) {
-            (ExprKind::Lit(Lit::Int(_)), t) if t == Type::i32() => Vec::new(),
-            (ExprKind::Lit(Lit::Float(_)), t) if t == Type::f32() => Vec::new(),
-            (ExprKind::Lit(Lit::String(_)), t) if t == Type::str() => Vec::new(),
-            (ExprKind::Lit(Lit::Char(_)), t) if t == Type::char() => Vec::new(),
-            (ExprKind::Lit(Lit::Bool(_)), t) if t == Type::bool() => Vec::new(),
-            (ExprKind::Lit(Lit::Unit), t) if t == Type::unit() => Vec::new(),
+            (ExprKind::Lit(Literal::Int(_)), t) if t == Type::int() => Vec::new(),
+            (ExprKind::Lit(Literal::Float(_)), t) if t == Type::float() => Vec::new(),
+            (ExprKind::Lit(Literal::String(_)), t) if t == Type::str() => Vec::new(),
+            (ExprKind::Lit(Literal::Char(_)), t) if t == Type::char() => Vec::new(),
+            (ExprKind::Lit(Literal::Bool(_)), t) if t == Type::bool() => Vec::new(),
+            (ExprKind::Lit(Literal::Unit), t) if t == Type::unit() => Vec::new(),
 
             (ExprKind::Lam { param_name: _, body, param_definition_id }, Type::Fun(param_type, ret_type)) => {
-                let new_env = env.update(param_definition_id.as_ref().unwrap().clone(), *param_type);
+                let new_env = env.update(param_definition_id.clone().unwrap(), *param_type);
                 self.check_expr(new_env, &body, *ret_type)
             }
 
@@ -233,10 +234,10 @@ impl<'a> TypeChecker<'a> {
     fn typecheck_module(&mut self, module: &Module) -> Result<(), Error> {
         // Insert all top-level definitions into item_scheme_map
         for ext in &module.externs {
-            self.type_schemes.insert(ext.definition_id.as_ref().unwrap().clone(), ext.type_scheme.clone());
+            self.type_schemes.insert(ext.definition_id.clone().unwrap(), ext.type_scheme.clone());
         }
         for item in &module.items {
-            self.type_schemes.insert(item.definition_id.as_ref().unwrap().clone(), item.type_scheme.clone());
+            self.type_schemes.insert(item.definition_id.clone().unwrap(), item.type_scheme.clone());
         }
 
         // Typecheck top-level definitions

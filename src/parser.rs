@@ -7,7 +7,7 @@ use std::{
 use walkdir::DirEntry;
 
 use crate::{
-    ast::*, cache::CompilerCache, error::{Error, ErrorKind}, lexer::{tokenize, Token}, location::{Location, Span}, types::{Type, TypeScheme, TypeVar}
+    ast::*, cache::CompilerCache, error::{Error, ErrorKind}, lexer::{tokenize, Token}, literal::Literal, location::{Location, Span}, types::{Type, TypeScheme, TypeVar}
 };
 
 pub enum Precedence {
@@ -39,7 +39,7 @@ macro_rules! expected_one_of {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(compiler_cache: &'a mut CompilerCache) -> Parser {
+    fn new(compiler_cache: &'a mut CompilerCache) -> Parser {
         Parser {
             compiler_cache,
             tokens: VecDeque::new(),
@@ -182,12 +182,8 @@ impl<'a> Parser<'a> {
             Token::KwBool => Ok(Type::bool()),
             Token::KwChar => Ok(Type::char()),
             Token::KwStr => Ok(Type::str()),
-            Token::KwI32 => Ok(Type::i32()),
-            Token::KwI64 => Ok(Type::i64()),
-            Token::KwU32 => Ok(Type::u32()),
-            Token::KwU64 => Ok(Type::u64()),
-            Token::KwF32 => Ok(Type::f32()),
-            Token::KwF64 => Ok(Type::f64()),
+            Token::KwInt => Ok(Type::int()),
+            Token::KwFloat => Ok(Type::float()),
 
             Token::UpperIdentifier(type_name) => Ok(Type::Const(type_name)),
             Token::LowerIdentifier(type_var) => Ok(Type::Var(TypeVar(type_var))),
@@ -330,32 +326,32 @@ impl<'a> Parser<'a> {
             }
 
             Token::LitBool(b) => Ok(Expr {
-                kind: ExprKind::Lit(Lit::Bool(b)),
+                kind: ExprKind::Lit(Literal::Bool(b)),
                 location: self.make_location(span),
             }),
 
             Token::LitInteger(i) => Ok(Expr {
-                kind: ExprKind::Lit(Lit::Int(i)),
+                kind: ExprKind::Lit(Literal::Int(i)),
                 location: self.make_location(span),
             }),
 
             Token::LitFloat(f) => Ok(Expr {
-                kind: ExprKind::Lit(Lit::Float(f)),
+                kind: ExprKind::Lit(Literal::Float(f)),
                 location: self.make_location(span),
             }),
 
             Token::LitString(s) => Ok(Expr {
-                kind: ExprKind::Lit(Lit::String(s)),
+                kind: ExprKind::Lit(Literal::String(s)),
                 location: self.make_location(span),
             }),
 
             Token::LitChar(c) => Ok(Expr {
-                kind: ExprKind::Lit(Lit::Char(c)),
+                kind: ExprKind::Lit(Literal::Char(c)),
                 location: self.make_location(span),
             }),
 
             Token::LitUnit => Ok(Expr {
-                kind: ExprKind::Lit(Lit::Unit),
+                kind: ExprKind::Lit(Literal::Unit),
                 location: self.make_location(span),
             }),
 

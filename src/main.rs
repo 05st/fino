@@ -14,6 +14,7 @@ mod cache;
 mod error;
 mod generator;
 mod lexer;
+mod literal;
 mod location;
 mod mir;
 mod parser;

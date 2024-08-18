@@ -57,18 +57,10 @@ pub enum Token {
     KwChar,
     #[token("str")]
     KwStr,
-    #[token("i32")]
-    KwI32,
-    #[token("i64")]
-    KwI64,
-    #[token("u32")]
-    KwU32,
-    #[token("u64")]
-    KwU64,
-    #[token("f32")]
-    KwF32,
-    #[token("f64")]
-    KwF64,
+    #[token("int")]
+    KwInt,
+    #[token("float")]
+    KwFloat,
 
     #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| lex.slice().to_owned())]
     LitString(String),
@@ -113,8 +105,8 @@ pub enum Token {
 
     // Regex for operator identifier should be the same as the one for the Operator
     // token
-    #[regex(r"(infl|infr|pref|post)\s+[\+\-*\/^!|<>=?$@#%:]+\s+[0-9]+\n", oper_decl_callback)]
-    OperDecl,
+    #[regex(r"(infl|infr|pref|post)\s+[\+\-*\/^!|<>=?$@#%:]+\s+[0-9]+\n", fixity_decl_callback)]
+    FixityDecl,
 
     // Priority is set lower for these three because the patterns can also match
     // reserved keywords / operators.
@@ -139,7 +131,7 @@ pub enum Token {
     Eof,
 }
 
-fn oper_decl_callback(lexer: &mut Lexer<Token>) -> Filter<()> {
+fn fixity_decl_callback(lexer: &mut Lexer<Token>) -> Filter<()> {
     let parts = lexer.slice().split_ascii_whitespace().collect::<Vec<&str>>();
     let prec = parts[2].parse::<u8>().expect("Failed to parse operator precedence");
 
@@ -240,17 +232,13 @@ impl Display for Token {
             Token::KwBool => write!(f, "'bool'"),
             Token::KwChar => write!(f, "'char'"),
             Token::KwStr => write!(f, "'str'"),
-            Token::KwI32 => write!(f, "'i32'"),
-            Token::KwI64 => write!(f, "'i64'"),
-            Token::KwU32 => write!(f, "'u32'"),
-            Token::KwU64 => write!(f, "'u64'"),
-            Token::KwF32 => write!(f, "'f32'"),
-            Token::KwF64 => write!(f, "'f64'"),
-            Token::LitString(_) => write!(f, "string"),
-            Token::LitInteger(_) => write!(f, "integer"),
-            Token::LitFloat(_) => write!(f, "float"),
-            Token::LitBool(_) => write!(f, "boolean"),
-            Token::LitChar(_) => write!(f, "character"),
+            Token::KwInt => write!(f, "'int'"),
+            Token::KwFloat => write!(f, "'float'"),
+            Token::LitString(_) => write!(f, "string literal"),
+            Token::LitInteger(_) => write!(f, "integer literal"),
+            Token::LitFloat(_) => write!(f, "float literal"),
+            Token::LitBool(_) => write!(f, "boolean literal"),
+            Token::LitChar(_) => write!(f, "character literal"),
             Token::LitUnit => write!(f, "'()'"),
             Token::LeftParen => write!(f, "'('"),
             Token::RightParen => write!(f, "')'"),
@@ -262,7 +250,7 @@ impl Display for Token {
             Token::BigArrow => write!(f, "'=>'"),
             Token::Dot => write!(f, "'.'"),
             Token::SpacedDot => write!(f, "' .'"),
-            Token::OperDecl => write!(f, "operator declaration"),
+            Token::FixityDecl => write!(f, "fixity declaration"),
             Token::Operator(_) => write!(f, "operator"),
             Token::UpperIdentifier(_) => write!(f, "uppercase identifier"),
             Token::LowerIdentifier(_) => write!(f, "lowercase identifier"),

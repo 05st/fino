@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use crate::{
     ast::*,
     cache::{CompilerCache, Definition, DefinitionId, ModuleId},
-    error::{Error, ErrorKind}, location::Location
+    error::{Error, ErrorKind},
+    location::Location
 };
 
 struct NameResolver<'a> {
@@ -183,7 +184,7 @@ impl<'a> NameResolver<'a> {
                     exports_env.insert_item(
                         &module.module_path,
                         item_name.clone(),
-                        definition_id.as_ref().unwrap().clone(),
+                        definition_id.clone().unwrap(),
                         location,
                     )?;
                 }
@@ -193,7 +194,7 @@ impl<'a> NameResolver<'a> {
             }
         }
 
-        self.module_exports.insert(module.module_id.as_ref().unwrap().clone(), exports_env);
+        self.module_exports.insert(module.module_id.clone().unwrap(), exports_env);
 
         Ok(())
     }
@@ -237,7 +238,7 @@ impl<'a> NameResolver<'a> {
                     return Err(Error::new(ErrorKind::AlreadyImportedModule(import.module_path.clone()), import.location.clone()));
                 }
                 None => {
-                    imported_modules.insert(import.module_path.clone(), import.module_id.as_ref().unwrap().clone());
+                    imported_modules.insert(import.module_path.clone(), import.module_id.clone().unwrap());
                 }
             }
         }

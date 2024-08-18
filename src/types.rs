@@ -59,7 +59,7 @@ macro_rules! base_types {
 
 impl Type {
     // Insert base type constructors
-    base_types!(unit, bool, char, str, i32, i64, u32, u64, f32, f64);
+    base_types!(unit, bool, char, str, int, float);
 
     // Checks if self contains uvar, since unifying them would result in attempting
     // to construct an infinite type.

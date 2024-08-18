@@ -1,5 +1,5 @@
 
 
 struct CodeGenerator {
-
+    
 }

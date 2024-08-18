@@ -1,4 +1,4 @@
-use crate::{cache::{DefinitionId, ModuleId}, location::Location, types::*};
+use crate::{cache::{DefinitionId, ModuleId}, literal::Literal, location::Location, types::*};
 
 // A qualified name contains the entire path to the name. For example,
 // 'abc::xyz::func' is a qualified name. An unqualified name would just be
@@ -10,18 +10,8 @@ pub enum Name {
 }
 
 #[derive(Debug)]
-pub enum Lit {
-    Int(i64),
-    Float(f64),
-    String(String),
-    Char(char),
-    Bool(bool),
-    Unit,
-}
-
-#[derive(Debug)]
 pub enum ExprKind {
-    Lit(Lit),
+    Lit(Literal),
     Var {
         // A variable can be a qualified or unqualified name. A variable written as a
         // qualified names can only refer to a top-level definition.
