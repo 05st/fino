@@ -1,20 +1,4 @@
-use std::{ops::Range, path::PathBuf};
-
-use crate::{cache::{DefinitionId, ModuleId}, types::*};
-
-pub type Span = Range<usize>;
-
-#[derive(Clone, Debug)]
-pub struct Location {
-    pub path: PathBuf,
-    pub span: Range<usize>,
-}
-
-impl Location {
-    pub fn new(path: PathBuf, span: Span) -> Location {
-        Location { path, span }
-    }
-}
+use crate::{cache::{DefinitionId, ModuleId}, location::Location, types::*};
 
 // A qualified name contains the entire path to the name. For example,
 // 'abc::xyz::func' is a qualified name. An unqualified name would just be

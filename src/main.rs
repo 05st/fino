@@ -12,10 +12,14 @@ use walkdir::{DirEntry, WalkDir};
 mod ast;
 mod cache;
 mod error;
+mod generator;
 mod lexer;
+mod location;
+mod mir;
 mod parser;
 mod resolver;
 mod sorter;
+mod transformer;
 mod typechecker;
 mod types;
 

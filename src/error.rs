@@ -3,8 +3,8 @@ use std::fs::read_to_string;
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
-use crate::ast::Location;
 use crate::lexer::Token;
+use crate::location::Location;
 use crate::types::Type;
 
 #[derive(Debug)]

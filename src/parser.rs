@@ -7,11 +7,7 @@ use std::{
 use walkdir::DirEntry;
 
 use crate::{
-    ast::*,
-    cache::CompilerCache,
-    error::{Error, ErrorKind},
-    lexer::{tokenize, Token},
-    types::{Type, TypeScheme, TypeVar}
+    ast::*, cache::CompilerCache, error::{Error, ErrorKind}, lexer::{tokenize, Token}, location::{Location, Span}, types::{Type, TypeScheme, TypeVar}
 };
 
 pub enum Precedence {

@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
 use logos::{skip, Filter, FilterResult, Lexer, Logos};
 
-use crate::{ast::{Location, Span}, error::{Error, ErrorKind}, parser::Precedence};
+use crate::{error::{Error, ErrorKind}, location::{Location, Span}, parser::Precedence};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum LexerError {

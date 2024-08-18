@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{ast::{Location, Module}, parser::Precedence};
+use crate::{ast::Module, location::Location, parser::Precedence};
 
 #[derive(Default)]
 pub struct CompilerCache {

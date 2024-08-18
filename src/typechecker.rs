@@ -5,6 +5,7 @@ use ena::unify::InPlaceUnificationTable;
 use crate::ast::*;
 use crate::cache::{CompilerCache, DefinitionId};
 use crate::error::{Error, ErrorKind};
+use crate::location::Location;
 use crate::types::*;
 
 #[derive(Clone, Debug)]

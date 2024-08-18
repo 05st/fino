@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use crate::{
     ast::*,
     cache::{CompilerCache, Definition, DefinitionId, ModuleId},
-    error::{Error, ErrorKind}
+    error::{Error, ErrorKind}, location::Location
 };
 
 struct NameResolver<'a> {

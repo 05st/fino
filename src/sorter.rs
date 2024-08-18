@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    ast::{Location, Module},
+    ast::Module,
     cache::{CompilerCache, ModuleId},
-    error::{Error, ErrorKind}
+    error::{Error, ErrorKind}, location::Location
 };
 
 enum ModuleState {
