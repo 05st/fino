@@ -3,10 +3,13 @@
 a functional programming language with some fine features
 
 notably,
-- local type inference
+- type inference
+- parametric polymorphism
+- typeclasses
 - nominal, isorecursive types
 - structural types
-- typeclasses
+- pattern matching
 - user-defined operators
-
-ideally we would have equirecursive structural types but i don't know how to implement those (yet)
+- automatic currying
+- partial application
+- llvm target
