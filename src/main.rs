@@ -6,6 +6,7 @@ use error::Error;
 use parser::parse_program;
 use resolver::resolve_program;
 use sorter::sort_program;
+use transformer::transform_program;
 use typechecker::typecheck_program;
 use walkdir::{DirEntry, WalkDir};
 
@@ -44,6 +45,10 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
     sort_program(&mut compiler_cache)?;
     resolve_program(&mut compiler_cache)?;
     typecheck_program(&mut compiler_cache)?;
+
+    let mir = transform_program(&mut compiler_cache);
+
+    println!("{:#?}", mir);
 
     Ok(())
 }

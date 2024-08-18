@@ -1,10 +1,11 @@
-use crate::{cache::DefinitionId, literal::Literal};
+use crate::literal::Literal;
 
+#[derive(Debug)]
 pub enum Expr {
     Lit(Literal),
-    Var(DefinitionId),
+    Var(String),
     App {
-        fun: Box<Expr>,
+        fun_name: String,
         args: Vec<Expr>,
     },
     If {
@@ -13,19 +14,21 @@ pub enum Expr {
         fexpr: Box<Expr>,
     },
     Let {
+        name: String,
         aexpr: Box<Expr>,
         body: Box<Expr>,
-        definition_id: DefinitionId,
     },
 }
 
+#[derive(Debug)]
 pub struct Function {
-    pub definition_id: DefinitionId,
+    pub name: String,
     pub arg_types: Vec<Type>,
     pub ret_type: Type,
     pub body: Expr,
 }
 
+#[derive(Debug)]
 pub enum Type {
     Bool,
     Char,

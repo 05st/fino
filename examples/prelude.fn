@@ -14,4 +14,4 @@ let test : int = let n = (5) in id (let n = n in id n)
 let abc : bool = let res = id prelude.id true in if res then res else false
 let twenty : int = 2! * 10 * 2 * 42!
 
-let what : char = let f = \x y -> y in if f false true then f 12 'x' else 'z'
+let what : char = let f = \x y -> y in if f false true then 'x' else 'z'

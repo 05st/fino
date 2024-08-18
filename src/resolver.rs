@@ -12,6 +12,7 @@ struct NameResolver<'a> {
     module_exports: HashMap<ModuleId, Environment>,
     definition_count: usize,
     environment: Environment,
+    module_path: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -108,21 +109,36 @@ impl<'a> NameResolver<'a> {
             module_exports: HashMap::new(),
             definition_count: 0,
             environment: Environment::new(),
+            module_path: None,
         }
     }
 
-    fn new_definition(&mut self, location: Location) -> DefinitionId {
+    fn new_definition(&mut self, name: String, location: Location, local: bool) -> DefinitionId {
+        let mut qualified_name = self.module_path.clone().unwrap();
+        qualified_name.push(name);
+
+        // Mangle local definition names, we don't want to mangle top-level names since
+        // libraries can export top-level definitions, and definition_ids aren't the same
+        // between compiler runs.
+        if local {
+            qualified_name.push(self.definition_count.to_string());
+        }
+
         let definition_id = DefinitionId(self.definition_count);
+        self.definition_count += 1;
+
         self.compiler_cache.definitions.push(Definition {
             location,
+            qualified_name,
         });
-        self.definition_count += 1;
+
         definition_id
     }
 
     fn resolve_expr(&mut self, expr: &mut Expr) -> Result<(), Error> {
         match &mut expr.kind {
             ExprKind::Lit(_) => Ok(()),
+
             ExprKind::Var { name, definition_id } => {
                 *definition_id = Some(match name {
                     Name::Unqualified(ident) => self.environment.lookup_unqualified_name(ident, &expr.location)?,
@@ -131,12 +147,14 @@ impl<'a> NameResolver<'a> {
 
                 Ok(())
             }
+
             ExprKind::App { ref mut fun, ref mut arg } => {
                 self.resolve_expr(fun)?;
                 self.resolve_expr(arg)
             }
+
             ExprKind::Lam { param_name, ref mut body, param_definition_id } => {
-                let new_definition_id = self.new_definition(expr.location.clone());
+                let new_definition_id = self.new_definition(param_name.clone(), expr.location.clone(), true);
                 *param_definition_id = Some(new_definition_id.clone());
 
                 self.environment.push_scope(param_name.clone(), new_definition_id);
@@ -145,10 +163,11 @@ impl<'a> NameResolver<'a> {
 
                 Ok(())
             }
+
             ExprKind::Let { name, ref mut aexpr, ref mut body, definition_id } => {
                 self.resolve_expr(aexpr)?;
 
-                let new_definition_id = self.new_definition(expr.location.clone());
+                let new_definition_id = self.new_definition(name.clone(), expr.location.clone(), true);
                 *definition_id = Some(new_definition_id.clone());
 
                 self.environment.push_scope(name.clone(), new_definition_id);
@@ -157,6 +176,7 @@ impl<'a> NameResolver<'a> {
 
                 Ok(())
             }
+
             ExprKind::If { cond, ref mut texpr, ref mut fexpr } => {
                 self.resolve_expr(cond)?;
                 self.resolve_expr(texpr)?;
@@ -200,11 +220,12 @@ impl<'a> NameResolver<'a> {
     }
 
     fn resolve_module(&mut self, module: &mut Module) -> Result<(), Error> {
+        self.module_path = Some(module.module_path.clone());
         self.environment = Environment::new();
 
         // Set up definitions for externs
         for ext in module.externs.iter_mut() {
-            let definition_id = self.new_definition(ext.location.clone());
+            let definition_id = self.new_definition(ext.name.clone(), ext.location.clone(), false);
             ext.definition_id = Some(definition_id.clone());
 
             self.environment.insert_item(
@@ -217,7 +238,7 @@ impl<'a> NameResolver<'a> {
 
         // Set up definitions for items
         for item in module.items.iter_mut() {
-            let definition_id = self.new_definition(item.location.clone());
+            let definition_id = self.new_definition(item.name.clone(), item.location.clone(), false);
             item.definition_id = Some(definition_id.clone());
 
             self.environment.insert_item(

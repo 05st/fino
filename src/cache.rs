@@ -17,6 +17,7 @@ pub struct CompilerCache {
 #[derive(Debug)]
 pub struct Definition {
     pub location: Location,
+    pub qualified_name: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -43,5 +44,5 @@ macro_rules! impl_index {
     };
 }
 
-impl_index!(ModuleId, Module, modules);
-impl_index!(DefinitionId, Definition, definitions);
+impl_index!(&ModuleId, Module, modules);
+impl_index!(&DefinitionId, Definition, definitions);
