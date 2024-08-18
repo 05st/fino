@@ -127,6 +127,9 @@ pub enum Token {
     #[regex(r"[ \t]+", skip)]
     Space,
 
+    #[regex(r"//.*", skip)]
+    Comment,
+
     // Created by parser only
     Eof,
 }
@@ -258,6 +261,7 @@ impl Display for Token {
             Token::Dedent => write!(f, "de-indentation"),
             Token::Newline => write!(f, "newline"),
             Token::Space => write!(f, "space"),
+            Token::Comment => write!(f, "comment"),
             Token::Eof => write!(f, "end of file"),
         }
     }
