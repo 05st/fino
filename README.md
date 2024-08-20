@@ -1,8 +1,6 @@
 # fino
 
-a functional programming language with some fine features
-
-notably,
+a functional programming language with some fine features, such as
 - type inference
 - parametric polymorphism
 - typeclasses
