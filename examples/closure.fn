@@ -1,0 +1,4 @@
+fn add : int -> int -> int
+    a b = a
+
+let two : int = add 2 1

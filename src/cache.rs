@@ -17,7 +17,8 @@ pub struct CompilerCache {
 #[derive(Debug)]
 pub struct Definition {
     pub location: Location,
-    pub qualified_name: Vec<String>,
+    pub mangled_name: Vec<String>,
+    pub local: bool,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

@@ -10,6 +10,8 @@ notably,
 - structural types
 - pattern matching
 - user-defined operators
+- first class functions
 - automatic currying
 - partial application
 - llvm target
+- javascript target

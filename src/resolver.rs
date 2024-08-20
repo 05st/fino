@@ -114,14 +114,14 @@ impl<'a> NameResolver<'a> {
     }
 
     fn new_definition(&mut self, name: String, location: Location, local: bool) -> DefinitionId {
-        let mut qualified_name = self.module_path.clone().unwrap();
-        qualified_name.push(name);
+        let mut mangled_name = self.module_path.clone().unwrap();
+        mangled_name.push(name);
 
         // Mangle local definition names, we don't want to mangle top-level names since
         // libraries can export top-level definitions, and definition_ids aren't the same
         // between compiler runs.
         if local {
-            qualified_name.push(self.definition_count.to_string());
+            mangled_name.push(self.definition_count.to_string());
         }
 
         let definition_id = DefinitionId(self.definition_count);
@@ -129,7 +129,8 @@ impl<'a> NameResolver<'a> {
 
         self.compiler_cache.definitions.push(Definition {
             location,
-            qualified_name,
+            mangled_name,
+            local,
         });
 
         definition_id

@@ -16,18 +16,50 @@ impl<'a> Transformer<'a> {
     }
 
     fn get_definition_name(&self, definition_id: &DefinitionId) -> String {
-        self.compiler_cache[definition_id].qualified_name.join("_")
+        self.compiler_cache[definition_id].mangled_name.join("_")
     }
 
-    // Flattens nested App exprs into a list of all the args, and returns the first non-app fun
-    // it encounters, at which point it stops.
-    fn flatten_app_exprs<'e>(expr: &'e ast::Expr, args: &mut Vec<&'e ast::Expr>) -> &'e ast::Expr {
+    fn new_misc_name(&mut self, prefix: &str) -> String {
+        let new_name = format!("_{}_{}", prefix, self.misc_name_count);
+        self.misc_name_count += 1;
+        new_name
+    }
+
+    // Collects all the free variables in an expression
+    fn collect_free_vars(&self, expr: &ast::Expr, scope: im::HashSet<DefinitionId>, free_vars: &mut Vec<String>) {
         match &expr.kind {
-            ast::ExprKind::App { fun, arg } => {
-                args.push(arg);
-                Transformer::flatten_app_exprs(fun, args)
+            ast::ExprKind::Lit(_) => (),
+
+            ast::ExprKind::Var { name: _, definition_id } => {
+                let definition_id = definition_id.as_ref().unwrap();
+                // We don't want to treat references to top-level items as free variables
+                if self.compiler_cache[definition_id].local && !scope.contains(definition_id) {
+                    free_vars.push(self.get_definition_name(definition_id));
+                }
             }
-            _ => expr,
+
+            ast::ExprKind::App { fun, arg } => {
+                self.collect_free_vars(fun, scope.clone(), free_vars);
+                self.collect_free_vars(arg, scope, free_vars);
+            }
+
+            ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
+                let updated_scope = scope.update(param_definition_id.clone().unwrap());
+                self.collect_free_vars(body, updated_scope, free_vars);
+            }
+
+            ast::ExprKind::Let { name: _, aexpr, body, definition_id } => {
+                let updated_scope = scope.update(definition_id.clone().unwrap());
+                // Notice we don't use updated_scope for aexpr
+                self.collect_free_vars(aexpr, scope, free_vars);
+                self.collect_free_vars(body, updated_scope, free_vars);
+            }
+
+            ast::ExprKind::If { cond, texpr, fexpr } => {
+                self.collect_free_vars(cond, scope.clone(), free_vars);
+                self.collect_free_vars(texpr, scope.clone(), free_vars);
+                self.collect_free_vars(fexpr, scope, free_vars);
+            }
         }
     }
 
@@ -39,28 +71,35 @@ impl<'a> Transformer<'a> {
                 mir::Expr::Var(self.get_definition_name(definition_id.as_ref().unwrap()))
             }
 
-            ast::ExprKind::App { .. } => {
-                let mut args = Vec::new();
-                let fun = Transformer::flatten_app_exprs(expr, &mut args);
-
-                let fun_name = match &fun.kind {
-                    ast::ExprKind::Var { name: _, definition_id } => {
-                        self.get_definition_name(definition_id.as_ref().unwrap())
-                    }
-                    _ => {
-                        // TODO:
-                        // If the function expr is not a variable, we need to wrap it in a new closure
-                        todo!()
-                    }
-                };
-
+            ast::ExprKind::App { fun, arg } => {
                 mir::Expr::App {
+                    fun: Box::new(self.transform_expr(fun)),
+                    arg: Box::new(self.transform_expr(arg)),
+                }
+            },
+
+            ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
+                let mut free_vars = Vec::new();
+                self.collect_free_vars(expr, im::HashSet::new(), &mut free_vars);
+
+                let fun_name = self.new_misc_name("lambda");
+
+                let mut param_names = free_vars.clone();
+                param_names.push(self.get_definition_name(param_definition_id.as_ref().unwrap()));
+
+                let transformed_body = self.transform_expr(body);
+
+                self.functions.push(mir::Function {
+                    name: fun_name.clone(),
+                    param_names,
+                    body: transformed_body,
+                });
+
+                mir::Expr::Closure {
                     fun_name,
-                    args: args.into_iter().map(|f| self.transform_expr(f)).collect(),
+                    free_vars,
                 }
             }
-
-            ast::ExprKind::Lam { param_name, body, param_definition_id } => todo!(),
 
             ast::ExprKind::Let { name: _, aexpr, body, definition_id } => {
                 mir::Expr::Let {
@@ -81,7 +120,15 @@ impl<'a> Transformer<'a> {
     }
 
     fn transform_module(&mut self, module: &ast::Module) -> () {
-
+        // Every item becomes a function that takes no arguments, i.e. a thunk
+        for item in &module.items {
+            let transformed_expr = self.transform_expr(&item.expr);
+            self.functions.push(mir::Function {
+                name: self.get_definition_name(item.definition_id.as_ref().unwrap()),
+                param_names: Vec::new(),
+                body: transformed_expr,
+            });
+        }
     }
 }
 
