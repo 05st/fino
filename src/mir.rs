@@ -25,8 +25,14 @@ pub enum Expr {
 }
 
 #[derive(Debug)]
-pub struct Function {
-    pub name: String,
-    pub param_names: Vec<String>,
-    pub body: Expr,
+pub enum Global {
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Expr,
+    },
+    Variable {
+        name: String,
+        body: Expr,
+    }
 }

@@ -2,7 +2,7 @@ use crate::{ast, cache::{CompilerCache, DefinitionId}, mir};
 
 struct Transformer<'a> {
     compiler_cache: &'a mut CompilerCache,
-    functions: Vec<mir::Function>,
+    globals: Vec<mir::Global>,
     misc_name_count: usize,
 }
 
@@ -10,7 +10,7 @@ impl<'a> Transformer<'a> {
     fn new(compiler_cache: &mut CompilerCache) -> Transformer {
         Transformer {
             compiler_cache,
-            functions: Vec::new(),
+            globals: Vec::new(),
             misc_name_count: 0,
         }
     }
@@ -84,14 +84,14 @@ impl<'a> Transformer<'a> {
 
                 let fun_name = self.new_misc_name("lambda");
 
-                let mut param_names = free_vars.clone();
-                param_names.push(self.get_definition_name(param_definition_id.as_ref().unwrap()));
+                let mut params = free_vars.clone();
+                params.push(self.get_definition_name(param_definition_id.as_ref().unwrap()));
 
                 let transformed_body = self.transform_expr(body);
 
-                self.functions.push(mir::Function {
+                self.globals.push(mir::Global::Function {
                     name: fun_name.clone(),
-                    param_names,
+                    params,
                     body: transformed_body,
                 });
 
@@ -120,19 +120,37 @@ impl<'a> Transformer<'a> {
     }
 
     fn transform_module(&mut self, module: &ast::Module) -> () {
-        // Every item becomes a function that takes no arguments, i.e. a thunk
         for item in &module.items {
-            let transformed_expr = self.transform_expr(&item.expr);
-            self.functions.push(mir::Function {
-                name: self.get_definition_name(item.definition_id.as_ref().unwrap()),
-                param_names: Vec::new(),
-                body: transformed_expr,
-            });
+            let name = self.get_definition_name(item.definition_id.as_ref().unwrap());
+
+            let global = match &item.expr.kind {
+                ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
+                    // If the expression is a lambda, create a function instead
+                    // Note the expression should have zero free variables.
+                    let params = vec![self.get_definition_name(param_definition_id.as_ref().unwrap())];
+                    let transformed_body = self.transform_expr(body);
+                    mir::Global::Function {
+                        name,
+                        params,
+                        body: transformed_body,
+                    }
+                },
+
+                _ => {
+                    let transformed_body = self.transform_expr(&item.expr);
+                    mir::Global::Variable {
+                        name,
+                        body: transformed_body,
+                    }
+                }
+            };
+
+            self.globals.push(global);
         }
     }
 }
 
-pub fn transform_program(compiler_cache: &mut CompilerCache) -> Vec<mir::Function> {
+pub fn transform_program(compiler_cache: &mut CompilerCache) -> Vec<mir::Global> {
     let mut transformer = Transformer::new(compiler_cache);
 
     let mut queue = Vec::new();
@@ -145,5 +163,5 @@ pub fn transform_program(compiler_cache: &mut CompilerCache) -> Vec<mir::Functio
         transformer.compiler_cache.modules.push_front(module);
     }
 
-    transformer.functions
+    transformer.globals
 }
