@@ -15,7 +15,7 @@ impl<'a> Transformer<'a> {
         }
     }
 
-    fn get_definition_name(&self, definition_id: &DefinitionId) -> String {
+    fn get_mangled_name(&self, definition_id: &DefinitionId) -> String {
         self.compiler_cache[definition_id].mangled_name.join("_")
     }
 
@@ -34,7 +34,7 @@ impl<'a> Transformer<'a> {
                 let definition_id = definition_id.as_ref().unwrap();
                 // We don't want to treat references to top-level items as free variables
                 if self.compiler_cache[definition_id].local && !scope.contains(definition_id) {
-                    free_vars.push(self.get_definition_name(definition_id));
+                    free_vars.push(self.get_mangled_name(definition_id));
                 }
             }
 
@@ -68,7 +68,7 @@ impl<'a> Transformer<'a> {
             ast::ExprKind::Lit(literal) => mir::Expr::Lit(literal.clone()),
 
             ast::ExprKind::Var { name: _, definition_id } => {
-                mir::Expr::Var(self.get_definition_name(definition_id.as_ref().unwrap()))
+                mir::Expr::Var(self.get_mangled_name(definition_id.as_ref().unwrap()))
             }
 
             ast::ExprKind::App { fun, arg } => {
@@ -85,7 +85,7 @@ impl<'a> Transformer<'a> {
                 let fun_name = self.new_misc_name("lambda");
 
                 let mut params = free_vars.clone();
-                params.push(self.get_definition_name(param_definition_id.as_ref().unwrap()));
+                params.push(self.get_mangled_name(param_definition_id.as_ref().unwrap()));
 
                 let transformed_body = self.transform_expr(body);
 
@@ -103,7 +103,7 @@ impl<'a> Transformer<'a> {
 
             ast::ExprKind::Let { name: _, aexpr, body, definition_id } => {
                 mir::Expr::Let {
-                    name: self.get_definition_name(definition_id.as_ref().unwrap()),
+                    name: self.get_mangled_name(definition_id.as_ref().unwrap()),
                     aexpr: Box::new(self.transform_expr(aexpr)),
                     body: Box::new(self.transform_expr(body)),
                 }
@@ -121,13 +121,13 @@ impl<'a> Transformer<'a> {
 
     fn transform_module(&mut self, module: &ast::Module) -> () {
         for item in &module.items {
-            let name = self.get_definition_name(item.definition_id.as_ref().unwrap());
+            let name = self.get_mangled_name(item.definition_id.as_ref().unwrap());
 
             let global = match &item.expr.kind {
                 ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
                     // If the expression is a lambda, create a function instead
                     // Note the expression should have zero free variables.
-                    let params = vec![self.get_definition_name(param_definition_id.as_ref().unwrap())];
+                    let params = vec![self.get_mangled_name(param_definition_id.as_ref().unwrap())];
                     let transformed_body = self.transform_expr(body);
                     mir::Global::Function {
                         name,

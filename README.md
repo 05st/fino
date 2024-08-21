@@ -12,4 +12,3 @@ a functional programming language with some fine features, such as
 - automatic currying
 - partial application
 - llvm target
-- javascript target
