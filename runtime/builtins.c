@@ -3,65 +3,81 @@
 #include <stdint.h>
 #include <string.h>
 
+//////////////
+// FINO INT //
+//////////////
+
 typedef struct {
     int32_t value;
 } fino__int;
 
-inline fino__int* fino__int_box(int32_t i) {
+fino__int* fino__int_box(int32_t i) {
     fino__int* box = GC_malloc(sizeof(fino__int));
     box->value = i;
     return box;
 }
 
-inline int32_t fino__int_unbox(fino__int* box) {
+int32_t fino__int_unbox(fino__int* box) {
     return box->value;
 }
+
+///////////////
+// FINO CHAR //
+///////////////
 
 typedef struct {
     int8_t value;
 } fino__char;
 
-inline fino__char* fino__char_box(int8_t c) {
+fino__char* fino__char_box(int8_t c) {
     fino__char* box = GC_malloc(sizeof(fino__char));
     box->value = c;
     return box;
 }
 
-inline int8_t fino__char_unbox(fino__char* box) {
+int8_t fino__char_unbox(fino__char* box) {
     return box->value;
 }
+
+//////////////
+// FINO STR //
+//////////////
 
 typedef struct {
     int8_t* buffer;
     int32_t length;
-    int32_t max_length;
-    int32_t factor;
 } fino__str;
 
-fino__str* fino__str_new() {
+// Since all data is immutable in fino, we don't have to copy the contents
+fino__str* fino__str_new(int8_t* init, int32_t length) {
     fino__str* str = GC_malloc(sizeof(fino__str));
-    str->buffer = NULL;
-    str->length = 0;
-    str->max_length = 0;
-    str->factor = 16;
+    str->buffer = init;
+    str->length = length;
     return str;
 }
 
-void fino__str_resize(fino__str* str, int32_t size) {
-    int8_t* new_buffer = GC_malloc(size);
-    memcpy(new_buffer, str->buffer, str->length);
-    GC_free(str->buffer);
-    str->buffer = new_buffer;
-    str->max_length = size;
+// Since all data is immutable in fino, we don't have to copy the contents
+fino__str* fino__str_clone(fino__str* orig) {
+    fino__str* str = GC_malloc(sizeof(fino__str));
+    str->buffer = orig->buffer;
+    str->length = orig->length;
+    return str;
 }
 
-void fino__str_append_prim(fino__str* str, int8_t c) {
-    if (str->length == str->max_length) {
-        fino__str_resize(str, str->max_length + str->factor);
-    }
-    str->buffer[str->length++] = c;
+fino__str* fino__str_append(fino__str* str, fino__char* c) {
+    fino__str* new_str = GC_malloc(sizeof(fino__str));
+    new_str->length = str->length + 1;
+    new_str->buffer = GC_malloc(new_str->length);
+    memcpy(new_str->buffer, str->buffer, str->length);
+    new_str->buffer[str->length] = fino__char_unbox(c);
+    return new_str;
 }
 
-inline void fino__str_append(fino__str* str, fino__char* c) {
-    fino__str_append_prim(str, c->value);
+fino__str* fino__str_concat(fino__str* lhs, fino__str* rhs) {
+    fino__str* new_str = GC_malloc(sizeof(fino__str));
+    new_str->length = lhs->length + rhs->length;
+    new_str->buffer = GC_malloc(new_str->length);
+    memcpy(new_str->buffer, lhs->buffer, lhs->length);
+    memcpy(new_str->buffer + lhs->length, rhs->buffer, rhs->length);
+    return new_str;
 }
