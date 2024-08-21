@@ -19,9 +19,11 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         }
     }
 
-    fn compile_literal(literal: &Literal) -> BasicValueEnum {
+    fn compile_literal(&self, literal: &Literal) -> BasicValueEnum {
         match literal {
-            Literal::Int(_) => todo!(),
+            Literal::Int(_) => {
+                todo!()
+            }
             Literal::Float(_) => todo!(),
             Literal::String(_) => todo!(),
             Literal::Char(_) => todo!(),
@@ -30,7 +32,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         }
     }
 
-    fn compile_expr(expr: &mir::Expr) -> BasicValueEnum {
+    fn compile_expr(&self, expr: &mir::Expr) -> BasicValueEnum {
         match expr {
             mir::Expr::Lit(_) => todo!(),
             mir::Expr::Var(_) => todo!(),
@@ -49,5 +51,5 @@ pub fn compile_program(compiler_cache: &mut CompilerCache) {
 
     let codegen = Codegen::new(compiler_cache, &llvm_context, &builder, &module);
 
-    
+
 }
