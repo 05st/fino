@@ -2,6 +2,7 @@ use std::path::Path;
 
 use cache::CompilerCache;
 use clap::Parser as _;
+use codegen::compile_program;
 use error::Error;
 use parser::parse_program;
 use resolver::resolve_program;
@@ -49,6 +50,8 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
     let mir = transform_program(&mut compiler_cache);
 
     println!("{:#?}", mir);
+
+    compile_program(&mut compiler_cache, mir);
 
     Ok(())
 }

@@ -36,3 +36,8 @@ pub enum Global {
         body: Expr,
     }
 }
+
+#[derive(Debug)]
+pub enum Type {
+    Int,
+}
