@@ -1,7 +1,7 @@
-extern void _fino__init_globals();
-extern int main_main();
+extern void _fino_init_globals();
+extern void _fino_entry();
 int main() {
-    _fino__init_globals();
-    main_main();
+    _fino_init_globals();
+    _fino_entry();
     return 0;
 }

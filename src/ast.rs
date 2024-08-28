@@ -56,6 +56,7 @@ pub struct Item {
     pub expr: Expr,
     pub location: Location,
     pub definition_id: Option<DefinitionId>,
+    pub is_main: bool,
 }
 
 #[derive(Clone, Debug)]

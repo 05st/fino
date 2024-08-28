@@ -15,6 +15,8 @@ pub enum ErrorKind {
     UnexpectedIndent(usize),
     UndeclaredOperator(String),
     InvalidPrefixOperator(String),
+    MultipleMainFunctions,
+    InvalidMainFunctionType,
 
     // Module sort errors
     CircularDependency,
@@ -76,6 +78,8 @@ impl Display for ErrorKind {
             UnexpectedIndent(size) => write!(f, "Unexpected indent of size {} here", size),
             UndeclaredOperator(oper) => write!(f, "Undeclared operator {} encountered here", oper),
             InvalidPrefixOperator(oper) => write!(f, "Invalid prefix operator {}", oper),
+            MultipleMainFunctions => write!(f, "Found multiple main functions"),
+            InvalidMainFunctionType => write!(f, "Main function must have a type of unit -> unit"),
 
             CircularDependency => write!(f, "Modules have a circular dependency"),
             UnknownModule(module_path) => write!(f, "Could not find module {}", module_path.join(".")),

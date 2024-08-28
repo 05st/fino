@@ -21,6 +21,7 @@ struct Parser<'a> {
     tokens: VecDeque<(Token, Span)>,
     previous: Option<(Token, Span)>,
     filepath: PathBuf,
+    parsed_main: bool,
 }
 
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
@@ -45,6 +46,7 @@ impl<'a> Parser<'a> {
             tokens: VecDeque::new(),
             previous: None,
             filepath: PathBuf::new(),
+            parsed_main: false,
         }
     }
 
@@ -502,8 +504,20 @@ impl<'a> Parser<'a> {
         let span = self.span();
         let name = self.expect_identifier()?;
 
+        // Check if we parsed a main function
+        let is_main = name == "main";
+        if self.parsed_main {
+            return self.error(ErrorKind::MultipleMainFunctions, span);
+        }
+        self.parsed_main = is_main;
+
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
+
+        // A main function must have a unit -> unit type
+        if is_main && type_scheme.1 != Type::Fun(Box::new(Type::unit()), Box::new(Type::unit())) {
+            return self.error(ErrorKind::InvalidMainFunctionType, span);
+        }
 
         self.expect(Token::Indent)?;
 
@@ -544,6 +558,7 @@ impl<'a> Parser<'a> {
             expr,
             location: self.make_location(span),
             definition_id: None,
+            is_main,
         })
     }
 
@@ -568,6 +583,8 @@ impl<'a> Parser<'a> {
             expr,
             location: self.make_location(span),
             definition_id: None,
+            // Let-definitions shouldn't be an entry point
+            is_main: false,
         })
     }
 

@@ -30,14 +30,10 @@ pub enum Global {
         name: String,
         params: Vec<String>,
         body: Expr,
+        is_main: bool,
     },
     Variable {
         name: String,
         body: Expr,
     }
-}
-
-#[derive(Debug)]
-pub enum Type {
-    Int,
 }

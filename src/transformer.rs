@@ -93,6 +93,7 @@ impl<'a> Transformer<'a> {
                     name: fun_name.clone(),
                     params,
                     body: transformed_body,
+                    is_main: false,
                 });
 
                 mir::Expr::Closure {
@@ -133,6 +134,7 @@ impl<'a> Transformer<'a> {
                         name,
                         params,
                         body: transformed_body,
+                        is_main: item.is_main,
                     }
                 },
 
