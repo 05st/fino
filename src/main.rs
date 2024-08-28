@@ -2,7 +2,7 @@ use std::path::Path;
 
 use cache::CompilerCache;
 use clap::Parser as _;
-use codegen::compile_program;
+use llvm::compile_llvm;
 use error::Error;
 use parser::parse_program;
 use resolver::resolve_program;
@@ -13,7 +13,7 @@ use walkdir::{DirEntry, WalkDir};
 
 mod ast;
 mod cache;
-mod codegen;
+mod llvm;
 mod error;
 mod lexer;
 mod literal;
@@ -51,7 +51,7 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
 
     println!("{:#?}", mir);
 
-    compile_program(&mut compiler_cache, mir);
+    compile_llvm(mir);
 
     Ok(())
 }

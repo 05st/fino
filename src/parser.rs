@@ -273,12 +273,10 @@ impl<'a> Parser<'a> {
 
         let body = self.parse_expr()?;
 
-        // Reverse for proper fold direction
-        params.reverse();
-
         // Desugar function into definition with curried lambdas
         let expr = params
             .into_iter()
+            .rev()
             .fold(body, |child, (param_name, span)| Expr {
                 kind: ExprKind::Lam {
                     param_name,
@@ -527,12 +525,10 @@ impl<'a> Parser<'a> {
         let body = self.parse_expr()?;
         self.expect(Token::Dedent)?;
 
-        // Reverse for proper fold direction
-        params.reverse();
-
         // Desugar function into definition with curried lambdas
         let expr = params
             .into_iter()
+            .rev()
             .fold(body, |child, (param_name, span)| Expr {
                 kind: ExprKind::Lam {
                     param_name,

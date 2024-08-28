@@ -1,5 +1,7 @@
 
 let test : unit = ()
 
+let num : int = -12
+
 fn main : unit -> unit
     x = test
