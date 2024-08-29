@@ -5,7 +5,6 @@ a functional programming language with some fine features, such as
 - parametric polymorphism
 - typeclasses
 - nominal, isorecursive types
-- structural types
 - pattern matching
 - user-defined operators
 - first class functions

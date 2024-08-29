@@ -504,7 +504,7 @@ impl<'a> Parser<'a> {
         let span = self.span();
         let name = self.expect_identifier()?;
 
-        // Check if we parsed a main function
+        // Check if we parsed the main function
         let is_main = name == "main";
         if self.parsed_main {
             return self.error(ErrorKind::MultipleMainFunctions, span);
@@ -514,7 +514,7 @@ impl<'a> Parser<'a> {
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
 
-        // A main function must have a unit -> unit type
+        // The main function must have a unit -> unit type
         if is_main && type_scheme.1 != Type::Fun(Box::new(Type::unit()), Box::new(Type::unit())) {
             return self.error(ErrorKind::InvalidMainFunctionType, span);
         }

@@ -2,8 +2,8 @@ use crate::mir;
 
 use super::LLVMCodegen;
 
-impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
-    pub fn compile_global(&mut self, global: &mir::Global) {
+impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
+    pub fn compile_global(&mut self, global: &'m mir::Global) {
         match global {
             mir::Global::Function { name, params, body, is_main } => {
                 let fn_type = self.ptr_type().fn_type(&[self.ptr_type().into()].repeat(params.len()), false);
@@ -18,21 +18,18 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                     ptr_value.set_name(params[i].as_str());
                 }
 
-                self.builder.position_at_end(self.context.append_basic_block(fn_value, "entry"));
+                self.enter_fn_block(fn_value);
                 self.builder.build_return(Some(&self.compile_expr(body))).unwrap();
 
-                // If entry point, build call from main function
+                // If entry point, set self.entry_point
                 if *is_main {
-                    self.builder.position_at_end(self.main_fn_entry_block);
-                    self.builder.build_call(fn_value, &[], "main_call").unwrap();
+                    self.entry_point = Some(fn_value);
                 }
             }
 
             mir::Global::Variable { name, body } => {
                 let global_value = self.module.add_global(self.ptr_type(), None, name.as_str());
-                let init_value = self.compile_expr(body);
-
-                self.add_global_init(global_value, init_value);
+                self.add_global_init(global_value, body);
             }
         }
     }

@@ -4,7 +4,7 @@ use crate::literal::Literal;
 
 use super::LLVMCodegen;
 
-impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
+impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
     fn build_new_literal_call(&self, fn_name: &str, args: &[BasicMetadataValueEnum<'ctx>]) -> BasicValueEnum<'ctx> {
         self.builder
             .build_call(self.get_function(fn_name), args, "call")

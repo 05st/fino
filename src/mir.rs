@@ -1,6 +1,6 @@
 use crate::literal::Literal;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Lit(Literal),
     Var(String),
@@ -24,7 +24,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Global {
     Function {
         name: String,

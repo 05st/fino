@@ -4,7 +4,7 @@ let test : unit = ()
 let num : int = -12
 
 fn lmao : unit -> unit
-    a = a
+    a = if true then a else ()
 
 fn main : unit -> unit
     x = test

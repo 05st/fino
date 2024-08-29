@@ -10,6 +10,24 @@
 void* _fino_unit_val = NULL;
 
 ///////////////
+// FINO BOOL //
+///////////////
+
+typedef struct {
+    int8_t value;
+} _fino_bool;
+
+_fino_bool* _fino_bool_new(int8_t b) {
+    _fino_bool* box = GC_MALLOC(sizeof(_fino_bool));
+    box->value = b;
+    return box;
+}
+
+int8_t _fino_bool_get(_fino_bool* box) {
+    return box->value;
+}
+
+///////////////
 // FINO CHAR //
 ///////////////
 
