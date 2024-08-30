@@ -6,10 +6,10 @@ pub enum Expr {
     Var(String),
     Closure {
         fun_name: String,
-        free_vars: Vec<String>,
+        env: Vec<String>,
     },
     App {
-        fun: Box<Expr>,
+        closure: Box<Expr>,
         arg: Box<Expr>,
     },
     If {
@@ -28,7 +28,8 @@ pub enum Expr {
 pub enum Global {
     Function {
         name: String,
-        params: Vec<String>,
+        env: Vec<String>,
+        param: String,
         body: Expr,
         is_main: bool,
     },

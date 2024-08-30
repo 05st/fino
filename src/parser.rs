@@ -506,7 +506,7 @@ impl<'a> Parser<'a> {
 
         // Check if we parsed the main function
         let is_main = name == "main";
-        if self.parsed_main {
+        if is_main && self.parsed_main {
             return self.error(ErrorKind::MultipleMainFunctions, span);
         }
         self.parsed_main = is_main;

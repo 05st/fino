@@ -5,9 +5,9 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    types::PointerType,
+    types::{PointerType, StructType},
     values::{
-        BasicValue, FunctionValue, GlobalValue, PointerValue
+        FunctionValue, GlobalValue, PointerValue
     },
     AddressSpace
 };
@@ -58,12 +58,12 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
         self.context.ptr_type(AddressSpace::default())
     }
 
-    fn add_variable(&mut self, name: String, value: PointerValue<'ctx>) {
-        self.variables.insert(name, value);
+    fn ptr_struct(&self, size: usize) -> StructType<'ctx> {
+        self.context.struct_type(&[self.ptr_type().into()].repeat(size), false)
     }
 
-    fn enter_block(&mut self) -> BasicBlock<'ctx> {
-        self.enter_fn_block(self.cur_function.expect("Not inside a function"))
+    fn add_variable(&mut self, name: String, value: PointerValue<'ctx>) {
+        self.variables.insert(name, value);
     }
 
     fn enter_fn_block(&mut self, function: FunctionValue<'ctx>) -> BasicBlock<'ctx> {
@@ -73,8 +73,8 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
         block
     }
 
-    fn append_block(&self) -> BasicBlock<'ctx> {
-        self.context.append_basic_block(self.cur_function.expect("Not inside a function"), "entry")
+    fn append_block(&self, name: &str) -> BasicBlock<'ctx> {
+        self.context.append_basic_block(self.cur_function.expect("Not inside a function"), name)
     }
 
     fn add_global_init(&mut self, global_value: GlobalValue<'ctx>, init_expr: &'m mir::Expr) {
@@ -96,15 +96,24 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
                     self.context.$llvm_type().fn_type(&[self.ptr_type().into()], false),
                     None,
                 );
+                self.module.add_function(
+                    concat!($prefix, "_print"),
+                    self.ptr_type().fn_type(&[self.context.$llvm_type().into()], false),
+                    None,
+                );
             };
         }
 
-        self.module.add_global(self.ptr_type(), None, "_fino_unit_val");
-
-        declare_wrapper_fns!("_fino_bool", i8_type);
+        declare_wrapper_fns!("_fino_bool", bool_type);
         declare_wrapper_fns!("_fino_char", i8_type);
         declare_wrapper_fns!("_fino_int", i32_type);
         declare_wrapper_fns!("_fino_float", f32_type);
+
+        self.module.add_function(
+            "GC_malloc",
+            self.ptr_type().fn_type(&[self.context.i64_type().into()], false),
+            None,
+        );
     }
 
     fn finish(&mut self) {
@@ -125,8 +134,8 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
             // Call fino main function
             self.builder.build_call(
                 entry_fn,
-                &[self.get_global("_fino_unit_val").as_basic_value_enum().into()],
-                "main_call"
+                &[self.ptr_type().const_null().into()],
+                "_main_call"
             ).unwrap();
         }
 

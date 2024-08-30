@@ -1,8 +1,11 @@
+use std::collections::HashSet;
+
 use crate::{ast, cache::{CompilerCache, DefinitionId}, mir};
 
 struct Transformer<'a> {
     compiler_cache: &'a mut CompilerCache,
     globals: Vec<mir::Global>,
+    functions: HashSet<DefinitionId>,
     misc_name_count: usize,
 }
 
@@ -11,6 +14,7 @@ impl<'a> Transformer<'a> {
         Transformer {
             compiler_cache,
             globals: Vec::new(),
+            functions: HashSet::new(),
             misc_name_count: 0,
         }
     }
@@ -68,12 +72,24 @@ impl<'a> Transformer<'a> {
             ast::ExprKind::Lit(literal) => mir::Expr::Lit(literal.clone()),
 
             ast::ExprKind::Var { name: _, definition_id } => {
-                mir::Expr::Var(self.get_mangled_name(definition_id.as_ref().unwrap()))
+                let definition_id = definition_id.as_ref().unwrap();
+                let mangled_name = self.get_mangled_name(definition_id);
+
+                if self.functions.contains(definition_id) {
+                    mir::Expr::Closure {
+                        fun_name: mangled_name,
+                        env: Vec::new(),
+                    }
+                } else {
+                    mir::Expr::Var(mangled_name)
+                }
             }
+
 
             ast::ExprKind::App { fun, arg } => {
                 mir::Expr::App {
-                    fun: Box::new(self.transform_expr(fun)),
+                    // fun should evaluate to a closure
+                    closure: Box::new(self.transform_expr(fun)),
                     arg: Box::new(self.transform_expr(arg)),
                 }
             },
@@ -84,21 +100,19 @@ impl<'a> Transformer<'a> {
 
                 let fun_name = self.new_misc_name("lambda");
 
-                let mut params = free_vars.clone();
-                params.push(self.get_mangled_name(param_definition_id.as_ref().unwrap()));
-
                 let transformed_body = self.transform_expr(body);
 
                 self.globals.push(mir::Global::Function {
                     name: fun_name.clone(),
-                    params,
+                    env: free_vars.clone(),
+                    param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
                     body: transformed_body,
                     is_main: false,
                 });
 
                 mir::Expr::Closure {
                     fun_name,
-                    free_vars,
+                    env: free_vars,
                 }
             }
 
@@ -128,11 +142,14 @@ impl<'a> Transformer<'a> {
                 ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
                     // If the expression is a lambda, create a function instead
                     // Note the expression should have zero free variables.
-                    let params = vec![self.get_mangled_name(param_definition_id.as_ref().unwrap())];
                     let transformed_body = self.transform_expr(body);
+
+                    self.functions.insert(item.definition_id.clone().unwrap());
+
                     mir::Global::Function {
                         name,
-                        params,
+                        env: Vec::new(),
+                        param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
                         body: transformed_body,
                         is_main: item.is_main,
                     }

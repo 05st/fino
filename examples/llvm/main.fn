@@ -1,10 +1,18 @@
-
 let test : unit = ()
 
 let num : int = -12
 
+let maybe : bool = false
+
 fn lmao : unit -> unit
-    a = if true then a else ()
+    a = if true then a else if maybe then let thing = if maybe then a else () in thing else ()
 
 fn main : unit -> unit
-    x = test
+    x = let abc = x in abc
+
+fn add : int -> int -> int
+    a b = a
+
+let add10 : int -> int = add 10
+
+let twenty : int = add10 10

@@ -7,7 +7,7 @@ use super::LLVMCodegen;
 impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
     fn build_new_literal_call(&self, fn_name: &str, args: &[BasicMetadataValueEnum<'ctx>]) -> BasicValueEnum<'ctx> {
         self.builder
-            .build_call(self.get_function(fn_name), args, "call")
+            .build_call(self.get_function(fn_name), args, format!("_{}_call", fn_name).as_str())
             .unwrap()
             .try_as_basic_value()
             .unwrap_left()
@@ -39,7 +39,7 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
                 self.build_new_literal_call("_fino_bool_new", &[bool_value.into()])
             }
 
-            Literal::Unit => self.get_global("_fino_unit_val").as_basic_value_enum(),
+            Literal::Unit => self.ptr_type().const_null().as_basic_value_enum(),
         }
     }
 }
