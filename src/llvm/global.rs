@@ -2,8 +2,8 @@ use crate::mir;
 
 use super::LLVMCodegen;
 
-impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
-    pub fn compile_global(&mut self, global: &'m mir::Global) {
+impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
+    pub fn compile_global(&mut self, global: &mir::Global) {
         match global {
             mir::Global::Function { name, param, env, body, is_main } => {
                 let fn_type = self.ptr_type().fn_type(&[self.ptr_type().into()].repeat(2), false);
@@ -50,7 +50,18 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
 
             mir::Global::Variable { name, body } => {
                 let global_value = self.module.add_global(self.ptr_type(), None, name.as_str());
-                self.add_global_init(global_value, body);
+                global_value.set_initializer(&self.ptr_type().const_null());
+
+                let init_fn_type = self.context.void_type().fn_type(&[], false);
+                let init_fn = self.module.add_function(format!("_init_{}", name).as_str(), init_fn_type, None);
+                self.enter_fn_block(init_fn);
+
+                let init_value = self.compile_expr(body);
+                self.builder.build_store(global_value.as_pointer_value(), init_value).unwrap();
+
+                self.builder.build_return(None).unwrap();
+
+                self.global_init_fns.push(init_fn);
             }
         }
     }

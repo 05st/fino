@@ -4,28 +4,30 @@ use crate::mir;
 
 use super::LLVMCodegen;
 
-impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
+impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
     pub fn compile_expr(&mut self, expr: &mir::Expr) -> BasicValueEnum<'ctx> {
         match expr {
             mir::Expr::Lit(literal) => self.compile_literal(literal),
 
             mir::Expr::Var(var_name) => {
-                let source = match self.variables.get(var_name) {
-                    Some(ptr) => *ptr,
+                match self.variables.get(var_name) {
+                    Some(ptr) => (*ptr).as_basic_value_enum(),
                     None => {
                         if self.functions.contains(var_name) {
-                            self.get_function(var_name.as_str()).as_global_value().as_pointer_value()
+                            self.get_function(var_name.as_str())
+                                .as_global_value()
+                                .as_pointer_value()
+                                .as_basic_value_enum()
                         } else {
-                            self.get_global(var_name.as_str()).as_pointer_value()
+                            let ptr = self.get_global(var_name.as_str()).as_pointer_value();
+                            self.builder.build_load(
+                                self.ptr_type(),
+                                ptr,
+                                var_name.as_str(),
+                            ).unwrap().as_basic_value_enum()
                         }
                     }
-                };
-
-                self.builder.build_load(
-                    self.ptr_type(),
-                    source,
-                    var_name.as_str(),
-                ).unwrap().as_basic_value_enum()
+                }
             }
 
             mir::Expr::Closure { fun_name, env } => {
@@ -143,11 +145,14 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
             }
 
             mir::Expr::Let { name, aexpr, body } => {
-                let var_ptr = self.builder.build_alloca(self.ptr_type(), name.as_str()).unwrap();
-                self.add_variable(name.clone(), var_ptr);
+                // Allocate variable
+                let var_ptr = self.builder.build_alloca(self.ptr_type(), format!("_{}_store", name).as_str()).unwrap();
 
                 let compiled_aexpr = self.compile_expr(aexpr);
                 self.builder.build_store(var_ptr, compiled_aexpr).unwrap();
+
+                let var_value = self.builder.build_load(self.ptr_type(), var_ptr, name.as_str()).unwrap();
+                self.add_variable(name.clone(), var_value.into_pointer_value());
 
                 self.compile_expr(body)
             }

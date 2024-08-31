@@ -18,7 +18,7 @@ mod expr;
 mod global;
 mod literal;
 
-struct LLVMCodegen<'a, 'ctx, 'm> {
+struct LLVMCodegen<'a, 'ctx> {
     context: &'ctx Context,
     builder: &'a Builder<'ctx>,
     module: &'a Module<'ctx>,
@@ -29,11 +29,11 @@ struct LLVMCodegen<'a, 'ctx, 'm> {
     cur_function: Option<FunctionValue<'ctx>>,
 
     entry_point: Option<FunctionValue<'ctx>>,
-    global_inits: Vec<(GlobalValue<'ctx>, &'m mir::Expr)>,
+    global_init_fns: Vec<FunctionValue<'ctx>>,
 }
 
-impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
-    fn new(context: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx>) -> LLVMCodegen<'a, 'ctx, 'm> {
+impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
+    fn new(context: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx>) -> LLVMCodegen<'a, 'ctx> {
         LLVMCodegen {
             context,
             builder,
@@ -42,7 +42,7 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
             functions: HashSet::new(),
             cur_function: None,
             entry_point: None,
-            global_inits: Vec::new(),
+            global_init_fns: Vec::new(),
         }
     }
 
@@ -75,11 +75,6 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
 
     fn append_block(&self, name: &str) -> BasicBlock<'ctx> {
         self.context.append_basic_block(self.cur_function.expect("Not inside a function"), name)
-    }
-
-    fn add_global_init(&mut self, global_value: GlobalValue<'ctx>, init_expr: &'m mir::Expr) {
-        global_value.set_initializer(&self.ptr_type().const_null());
-        self.global_inits.push((global_value, init_expr));
     }
 
     fn declare_runtime(&self) {
@@ -124,9 +119,8 @@ impl<'a, 'ctx, 'm> LLVMCodegen<'a, 'ctx, 'm> {
         self.enter_fn_block(main_fn);
 
         // Set up globals
-        for (global_value, init_expr) in &self.global_inits.clone() { // TODO: Get rid of that .clone()
-            let init_value = self.compile_expr(init_expr);
-            self.builder.build_store(global_value.as_pointer_value(), init_value).unwrap();
+        for global_init_fn in &self.global_init_fns {
+            self.builder.build_call(*global_init_fn, &[], "_global_init_call").unwrap();
         }
 
         // If there is an entry point
