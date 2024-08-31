@@ -1,7 +1,7 @@
 fn factorial : int -> int
-    x = if false then 1 else factorial x
+    x = factorial x
 
 fn add : int -> int -> int
-    a b = a
+    a b = factorial a
 
 let thing : bool = false

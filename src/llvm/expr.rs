@@ -16,7 +16,6 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                         if self.functions.contains(var_name) {
                             self.get_function(var_name.as_str())
                                 .as_global_value()
-                                .as_pointer_value()
                                 .as_basic_value_enum()
                         } else {
                             let var_fn = self.get_function(var_name.as_str());

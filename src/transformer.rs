@@ -147,16 +147,23 @@ impl<'a> Transformer<'a> {
     }
 
     fn transform_module(&mut self, module: &ast::Module) -> () {
+        // If the top expression of an item is a lambda, create a MIR function instead
+        // Note all top expressions in items should have zero free variables.
+
+        // Declare all functions first
+        for item in &module.items {
+            if let ast::ExprKind::Lam { .. } = &item.expr.kind {
+                self.functions.insert(item.definition_id.clone().unwrap());
+            }
+        }
+
+        // Transform items
         for item in &module.items {
             let name = self.get_mangled_name(item.definition_id.as_ref().unwrap());
 
             let global = match &item.expr.kind {
                 ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
-                    // If the expression is a lambda, create a MIR function instead
-                    // Note the expression should have zero free variables.
                     let transformed_body = self.transform_expr(body);
-
-                    self.functions.insert(item.definition_id.clone().unwrap());
 
                     mir::Toplevel::Function {
                         name,
