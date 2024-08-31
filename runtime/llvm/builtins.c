@@ -14,7 +14,7 @@
         return box;\
     }\
 
-#define FINO_ARITH(fino_type)\
+#define FINO_NUMERICAL(fino_type)\
     fino_type* fino_type##_add(fino_type* a, fino_type* b) {\
         return fino_type##_new(a->value + b->value);\
     }\
@@ -26,6 +26,18 @@
     }\
     fino_type* fino_type##_div(fino_type* a, fino_type* b) {\
         return fino_type##_new(a->value / b->value);\
+    }\
+    _fino_bool* fino_type##_grt(fino_type* a, fino_type* b) {\
+        return _fino_bool_new(a->value > b->value);\
+    }\
+    _fino_bool* fino_type##_lst(fino_type* a, fino_type* b) {\
+        return _fino_bool_new(a->value < b->value);\
+    }\
+    _fino_bool* fino_type##_geq(fino_type* a, fino_type* b) {\
+        return _fino_bool_new(a->value >= b->value);\
+    }\
+    _fino_bool* fino_type##_leq(fino_type* a, fino_type* b) {\
+        return _fino_bool_new(a->value <= b->value);\
     }
 
 #define FINO_PRINT(fino_type, format)\
@@ -41,30 +53,40 @@ FINO_TYPE(int8_t, _fino_char);
 FINO_TYPE(int32_t, _fino_int);
 FINO_TYPE(float, _fino_float);
 
-FINO_ARITH(_fino_int);
-FINO_ARITH(_fino_float);
+FINO_NUMERICAL(_fino_int);
+FINO_NUMERICAL(_fino_float);
 
 FINO_PRINT(_fino_char, "%c");
 FINO_PRINT(_fino_int, "%d");
 FINO_PRINT(_fino_float, "%f");
 
+// Boolean operations
+// Special unbox function for bools only
+int8_t _fino_bool_get(_fino_bool* box) {
+    return box->value;
+}
+_fino_bool* _fino_bool_and(_fino_bool* a, _fino_bool* b) {
+    return _fino_bool_new(a->value && b->value);
+}
+_fino_bool* _fino_bool_or(_fino_bool* a, _fino_bool* b) {
+    return _fino_bool_new(a->value || b->value);
+}
+
+// String
 typedef struct {
     char* buffer;
     int32_t length;
 } _fino_string;
-
 _fino_string* _fino_string_new(char* s, int32_t l) {
     _fino_string* res = GC_malloc(sizeof(_fino_string));
     res->buffer = s;
     res->length = l;
     return res;
 }
-
 void* _fino_string_print(_fino_string* str) {
     printf("%s", str->buffer);
     return NULL;
 }
-
 void* _fino_string_concat(_fino_string* a, _fino_string* b) {
     int32_t res_len = a->length + b->length;
     char* res_buf = GC_malloc(res_len + 1); // Add one for null character

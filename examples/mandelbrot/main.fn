@@ -1,6 +1,9 @@
 import prelude
 
-fn id : a -> a
-    x = x
+fn pd : int -> unit
+    x = if x > 8 then print_char '#' else if x > 4 then print_char '+' else if x > 2 then print_char '.' else print_char ' '
 
-let main : unit = println_str (id "Hello, world!")
+fn converge : int -> float -> float -> float -> float -> int
+    iters cr ci r i = let r2 = r *. r in let i2 = i *. i in if (r2 +. i2) <. 4.0 && 256 > iters then converge (iters + 1) cr ci (r2 -. i2 +. cr) (r *. i *. 2.0 +. ci) else iters
+
+let main : unit = pd 5

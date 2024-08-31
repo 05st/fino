@@ -114,7 +114,28 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         declare_wrapper_fns("_fino_float", vec![self.context.f32_type().into()]);
         declare_wrapper_fns("_fino_string", vec![self.ptr_type().into(), self.context.i32_type().into()]);
 
-        let binary_oper_fns = vec!["_fino_string_concat"];
+        let binary_oper_fns = vec![
+            "_fino_int_add",
+            "_fino_int_sub",
+            "_fino_int_mul",
+            "_fino_int_div",
+            "_fino_int_grt",
+            "_fino_int_lst",
+            "_fino_int_geq",
+            "_fino_int_leq",
+            "_fino_float_add",
+            "_fino_float_sub",
+            "_fino_float_mul",
+            "_fino_float_div",
+            "_fino_float_grt",
+            "_fino_float_lst",
+            "_fino_float_geq",
+            "_fino_float_leq",
+            "_fino_bool_and",
+            "_fino_bool_or",
+            "_fino_string_concat"
+        ];
+
         for fn_name in binary_oper_fns {
             self.module.add_function(
                 fn_name,
@@ -122,6 +143,13 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 None,
             );
         }
+
+        // Special get function for unboxing bools, for use by conditional branching
+        self.module.add_function(
+            "_fino_bool_get",
+            self.context.bool_type().fn_type(&[self.ptr_type().into()], false),
+            None,
+        );
 
         self.module.add_function(
             "GC_malloc",

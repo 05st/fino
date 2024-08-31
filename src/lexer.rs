@@ -108,12 +108,12 @@ pub enum Token {
 
     // Regex for operator identifier should be the same as the one for the Operator
     // token
-    #[regex(r"(infl|infr|pref|post)\s+[\+\-*\/^!|<>=?$@#%:]+\s+[0-9]+\n", fixity_decl_callback)]
+    #[regex(r"(infl|infr|pref|post)\s+[\+\-*\/^!|<>=?$@#%:&.]+\s+[0-9]+\n", fixity_decl_callback)]
     FixityDecl,
 
     // Priority is set lower for these three because the patterns can also match
     // reserved keywords / operators.
-    #[regex(r"[\+\-*\/^!|<>=?$@#%:]+", priority = 1, callback = |lex| lex.slice().to_owned())]
+    #[regex(r"[\+\-*\/^!|<>=?$@#%:&.]+", priority = 1, callback = |lex| lex.slice().to_owned())]
     Operator(String),
     #[regex(r"[A-Z][A-Za-z0-9_']*", priority = 1, callback = |lex| lex.slice().to_owned())]
     UpperIdentifier(String),

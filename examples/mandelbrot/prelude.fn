@@ -1,5 +1,9 @@
 import io
+import logical
+import numerical
 import string
 
 export module io
+export module logical
+export module numerical
 export module string
