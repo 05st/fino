@@ -13,9 +13,6 @@
         box->value = v;\
         return box;\
     }\
-    inner_type name##_get(name* box) {\
-        return box->value;\
-    }
 
 #define FINO_ARITH(fino_type)\
     fino_type* fino_type##_add(fino_type* a, fino_type* b) {\
@@ -50,3 +47,28 @@ FINO_ARITH(_fino_float);
 FINO_PRINT(_fino_char, "%c");
 FINO_PRINT(_fino_int, "%d");
 FINO_PRINT(_fino_float, "%f");
+
+typedef struct {
+    char* buffer;
+    int32_t length;
+} _fino_string;
+
+_fino_string* _fino_string_new(char* s, int32_t l) {
+    _fino_string* res = GC_malloc(sizeof(_fino_string));
+    res->buffer = s;
+    res->length = l;
+    return res;
+}
+
+void* _fino_string_print(_fino_string* str) {
+    printf("%s", str->buffer);
+    return NULL;
+}
+
+void* _fino_string_concat(_fino_string* a, _fino_string* b) {
+    int32_t res_len = a->length + b->length;
+    char* res_buf = GC_malloc(res_len + 1); // Add one for null character
+    strcpy(res_buf, a->buffer);
+    strcat(res_buf, b->buffer);
+    return _fino_string_new(res_buf, res_len);
+}

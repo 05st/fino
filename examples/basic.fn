@@ -1,7 +1,0 @@
-fn factorial : int -> int
-    x = factorial x
-
-fn add : int -> int -> int
-    a b = factorial a
-
-let thing : bool = false

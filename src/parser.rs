@@ -243,7 +243,6 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect(Token::RightParen)?;
-        args.reverse();
 
         self.expect(Token::Colon)?;
         let prim_type = self.parse_prim_type()?;

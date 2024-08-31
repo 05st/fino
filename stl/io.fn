@@ -1,0 +1,13 @@
+infl ++ 5
+
+fn print_str : str -> unit
+    s = extern #_fino_string_print(s) : unit
+
+fn println_str : str -> unit
+    s = print_str (s ++ "\n")
+
+fn (++): str -> str -> str
+    a b = extern #_fino_string_concat(a, b) : str
+
+fn main : unit -> unit
+    x = println_str "test"

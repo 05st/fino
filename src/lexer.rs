@@ -62,7 +62,7 @@ pub enum Token {
     #[token("float")]
     KwFloat,
 
-    #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| lex.slice().to_owned())]
+    #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| lex.slice().trim_matches('"').to_owned())]
     LitString(String),
     #[regex(r"-?[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
     LitInteger(i64),
