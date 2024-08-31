@@ -94,6 +94,19 @@ impl<'a> TypeChecker<'a> {
                 )
             }
 
+            ExprKind::Extern { fun_name: _, args, prim_type } => {
+                let mut args_constraints = Vec::new();
+                for arg in args {
+                    let (mut constraints, _) = self.infer_expr(env.clone(), arg);
+                    args_constraints.append(&mut constraints);
+                }
+
+                (
+                    args_constraints,
+                    prim_type.clone()
+                )
+            }
+
             ExprKind::Let { name: _, aexpr, body, definition_id } => {
                 let (expr_constraints, def_type) = self.infer_expr(env.clone(), &aexpr);
                 let new_env = env.update(definition_id.clone().unwrap(), def_type);
@@ -233,9 +246,6 @@ impl<'a> TypeChecker<'a> {
 
     fn typecheck_module(&mut self, module: &Module) -> Result<(), Error> {
         // Insert all top-level definitions into item_scheme_map
-        for ext in &module.externs {
-            self.type_schemes.insert(ext.definition_id.clone().unwrap(), ext.type_scheme.clone());
-        }
         for item in &module.items {
             self.type_schemes.insert(item.definition_id.clone().unwrap(), item.type_scheme.clone());
         }

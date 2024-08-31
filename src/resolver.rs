@@ -154,6 +154,13 @@ impl<'a> NameResolver<'a> {
                 self.resolve_expr(arg)
             }
 
+            ExprKind::Extern { fun_name: _, args, prim_type: _ } => {
+                for arg in args {
+                    self.resolve_expr(arg)?;
+                }
+                Ok(())
+            }
+
             ExprKind::Lam { param_name, ref mut body, param_definition_id } => {
                 let new_definition_id = self.new_definition(param_name.clone(), expr.location.clone(), true);
                 *param_definition_id = Some(new_definition_id.clone());
@@ -223,19 +230,6 @@ impl<'a> NameResolver<'a> {
     fn resolve_module(&mut self, module: &mut Module) -> Result<(), Error> {
         self.module_path = Some(module.module_path.clone());
         self.environment = Environment::new();
-
-        // Set up definitions for externs
-        for ext in module.externs.iter_mut() {
-            let definition_id = self.new_definition(ext.name.clone(), ext.location.clone(), false);
-            ext.definition_id = Some(definition_id.clone());
-
-            self.environment.insert_item(
-                &module.module_path,
-                ext.name.clone(),
-                definition_id,
-                &ext.location,
-            )?;
-        }
 
         // Set up definitions for items
         for item in module.items.iter_mut() {

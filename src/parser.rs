@@ -119,25 +119,25 @@ impl<'a> Parser<'a> {
     }
 
     // Consume specific token
-    fn expect(&mut self, expected: Token) -> Result<Token, Error> {
+    fn expect(&mut self, expected: Token) -> Result<Span, Error> {
         let (current, span) = self.next_with_span();
 
         if current == expected {
-            Ok(current)
+            Ok(span)
         } else {
             self.error(ErrorKind::ExpectedOneOf(current, vec![expected.to_string()]), span)
         }
     }
 
     // Consume any identifier (including parenthesized operators)
-    fn expect_identifier(&mut self) -> Result<String, Error> {
+    fn expect_identifier(&mut self) -> Result<(String, Span), Error> {
         match self.next_with_span() {
-            (Token::LowerIdentifier(ident) | Token::UpperIdentifier(ident), _) => Ok(ident),
+            (Token::LowerIdentifier(ident) | Token::UpperIdentifier(ident), span) => Ok((ident, span)),
             (Token::LeftParen, _) => {
                 let (token, span) = self.next_with_span();
                 if let Token::Operator(oper) = token {
                     self.expect(Token::RightParen)?;
-                    Ok(oper)
+                    Ok((oper, span))
                 } else {
                     self.error(expected_one_of!(token, "operator"), span)
                 }
@@ -156,7 +156,7 @@ impl<'a> Parser<'a> {
     fn parse_separated_name(&mut self) -> Result<Vec<String>, Error> {
         let mut result = Vec::new();
         loop {
-            result.push(self.expect_identifier()?);
+            result.push(self.expect_identifier()?.0);
             match self.peek() {
                 Token::Dot => self.next(),
                 _ => break,
@@ -175,8 +175,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Parse type constant or type variable
-    fn parse_base_type(&mut self) -> Result<Type, Error> {
+    fn parse_prim_type(&mut self) -> Result<Type, Error> {
         let (token, span) = self.next_with_span();
 
         match token {
@@ -187,10 +186,19 @@ impl<'a> Parser<'a> {
             Token::KwInt => Ok(Type::int()),
             Token::KwFloat => Ok(Type::float()),
 
+            other => self.error(expected_one_of!(other, "type"), span),
+        }
+    }
+
+    // Parse type constant or type variable
+    fn parse_base_type(&mut self) -> Result<Type, Error> {
+        match self.next() {
             Token::UpperIdentifier(type_name) => Ok(Type::Const(type_name)),
             Token::LowerIdentifier(type_var) => Ok(Type::Var(TypeVar(type_var))),
-
-            other => self.error(expected_one_of!(other, "type", "type variable"), span),
+            _ => {
+                self.restore();
+                self.parse_prim_type()
+            }
         }
     }
 
@@ -214,11 +222,46 @@ impl<'a> Parser<'a> {
         Ok(TypeScheme(type_vars, ty))
     }
 
-    fn parse_let_expr(&mut self) -> Result<Expr, Error> {
-        let let_span = self.span();
-        self.expect(Token::KwLet)?;
+    fn parse_extern_expr(&mut self) -> Result<Expr, Error> {
+        let extern_span = self.expect(Token::KwExtern)?;
 
-        let name = self.expect_identifier()?;
+        let fun_name = match self.next_with_span() {
+            (Token::ExternIdentifier(ident), _) => ident,
+            (other, span) => return self.error(expected_one_of!(other, "extern identifier"), span),
+        };
+
+        // Parse comma separated args
+        self.expect(Token::LeftParen)?;
+        let mut args = Vec::new();
+        loop {
+            let arg_expr = self.parse_expr()?;
+            args.push(arg_expr);
+            if let Token::RightParen = self.peek() {
+                break;
+            } else {
+                self.expect(Token::Comma)?;
+            }
+        }
+        self.expect(Token::RightParen)?;
+        args.reverse();
+
+        self.expect(Token::Colon)?;
+        let prim_type = self.parse_prim_type()?;
+
+        Ok(Expr {
+            kind: ExprKind::Extern {
+                fun_name,
+                args,
+                prim_type,
+            },
+            location: self.make_location(extern_span),
+        })
+    }
+
+    fn parse_let_expr(&mut self) -> Result<Expr, Error> {
+        self.expect(Token::KwLet)?;
+        let (name, span) = self.expect_identifier()?;
+
         self.expect(Token::Equal)?;
         let expr = self.parse_expr()?;
 
@@ -226,7 +269,7 @@ impl<'a> Parser<'a> {
         let body = self.parse_expr()?;
 
         Ok(Expr {
-            location: self.make_location(let_span),
+            location: self.make_location(span),
             kind: ExprKind::Let {
                 name,
                 aexpr: Box::new(expr),
@@ -238,8 +281,7 @@ impl<'a> Parser<'a> {
 
     // Parse if expression
     fn parse_if_expr(&mut self) -> Result<Expr, Error> {
-        let if_span = self.span();
-        self.expect(Token::KwIf)?;
+        let if_span = self.expect(Token::KwIf)?;
         let cond = self.parse_expr()?;
 
         self.expect(Token::KwThen)?;
@@ -490,6 +532,7 @@ impl<'a> Parser<'a> {
     // Parse expression
     fn parse_expr(&mut self) -> Result<Expr, Error> {
         match self.peek() {
+            Token::KwExtern => self.parse_extern_expr(),
             Token::KwLet => self.parse_let_expr(),
             Token::KwIf => self.parse_if_expr(),
             Token::Backslash => self.parse_lam_expr(),
@@ -500,9 +543,7 @@ impl<'a> Parser<'a> {
     // Parse and desugar top-level function definition
     fn parse_fn_item(&mut self) -> Result<Item, Error> {
         self.expect(Token::KwFn)?;
-
-        let span = self.span();
-        let name = self.expect_identifier()?;
+        let (name, span) = self.expect_identifier()?;
 
         // Check if we parsed the main function
         let is_main = name == "main";
@@ -565,9 +606,7 @@ impl<'a> Parser<'a> {
     // Parse top-level let-definition
     fn parse_let_item(&mut self) -> Result<Item, Error> {
         self.expect(Token::KwLet)?;
-
-        let span = self.span();
-        let name = self.expect_identifier()?;
+        let (name, span) = self.expect_identifier()?;
 
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
@@ -589,8 +628,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_import(&mut self) -> Result<Import, Error> {
-        let span = self.span();
-        self.expect(Token::KwImport)?;
+        let span = self.expect(Token::KwImport)?;
 
         let module_path = self.parse_separated_name()?;
         self.expect(Token::Newline)?;
@@ -603,8 +641,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_export(&mut self) -> Result<Export, Error> {
-        let span = self.span();
-        self.expect(Token::KwExport)?;
+        let span = self.expect(Token::KwExport)?;
 
         let export = if let Token::KwModule = self.peek() {
             self.next();
@@ -616,7 +653,7 @@ impl<'a> Parser<'a> {
             }
         } else {
             Export::Item {
-                item_name: self.expect_identifier()?,
+                item_name: self.expect_identifier()?.0,
                 location: self.make_location(span),
                 definition_id: None,
             }
@@ -627,29 +664,10 @@ impl<'a> Parser<'a> {
         Ok(export)
     }
 
-    fn parse_extern(&mut self) -> Result<Extern, Error> {
-        let span = self.span();
-        self.expect(Token::KwExtern)?;
-        let name = self.expect_identifier()?;
-
-        self.expect(Token::Colon)?;
-        let type_scheme = self.parse_type_scheme()?;
-
-        self.expect(Token::Newline)?;
-
-        Ok(Extern {
-            name,
-            type_scheme,
-            location: self.make_location(span),
-            definition_id: None,
-        })
-    }
-
     pub fn parse_module(&mut self, tokens: Vec<(Token, Span)>, module_path: Vec<String>, filepath: PathBuf) -> Result<(), Error> {
         self.tokens = VecDeque::from(tokens);
         self.filepath = filepath;
 
-        let mut externs = Vec::new();
         let mut imports = Vec::new();
         let mut exports = Vec::new();
         let mut items = Vec::new();
@@ -659,7 +677,6 @@ impl<'a> Parser<'a> {
 
             if !self.tokens.is_empty() {
                 match self.peek() {
-                    Token::KwExtern => externs.push(self.parse_extern()?),
                     Token::KwImport => imports.push(self.parse_import()?),
                     Token::KwExport => exports.push(self.parse_export()?),
                     Token::KwFn => items.push(self.parse_fn_item()?),
@@ -680,7 +697,6 @@ impl<'a> Parser<'a> {
 
         self.compiler_cache.modules.push_back(Module {
             module_path,
-            externs,
             imports,
             exports,
             items,

@@ -47,6 +47,12 @@ impl<'a> Transformer<'a> {
                 self.collect_free_vars(arg, scope, free_vars);
             }
 
+            ast::ExprKind::Extern { fun_name: _, args, prim_type: _ } => {
+                for arg in args {
+                    self.collect_free_vars(arg, scope.clone(), free_vars);
+                }
+            }
+
             ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
                 let updated_scope = scope.update(param_definition_id.clone().unwrap());
                 self.collect_free_vars(body, updated_scope, free_vars);
@@ -85,6 +91,12 @@ impl<'a> Transformer<'a> {
                 }
             }
 
+            ast::ExprKind::Extern { fun_name, args, prim_type: _ } => {
+                mir::Expr::Extern {
+                    fun_name: fun_name.clone(),
+                    args: args.into_iter().map(|arg| self.transform_expr(arg)).collect(),
+                }
+            }
 
             ast::ExprKind::App { fun, arg } => {
                 mir::Expr::App {

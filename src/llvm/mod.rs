@@ -86,7 +86,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 );
                 self.module.add_function(
                     concat!($prefix, "_print"),
-                    self.ptr_type().fn_type(&[self.context.$llvm_type().into()], false),
+                    self.ptr_type().fn_type(&[self.ptr_type().into()], false),
                     None,
                 );
             };

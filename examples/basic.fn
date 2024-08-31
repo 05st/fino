@@ -1,7 +1,7 @@
-fn factorial : u32 -> i32
+fn factorial : int -> int
     x = if false then 1 else factorial x
 
-fn add : u32 -> u32 -> u32
+fn add : int -> int -> int
     a b = a
 
 let thing : bool = false

@@ -12,6 +12,10 @@ pub enum Expr {
         closure: Box<Expr>,
         arg: Box<Expr>,
     },
+    Extern {
+        fun_name: String,
+        args: Vec<Expr>,
+    },
     If {
         cond: Box<Expr>,
         texpr: Box<Expr>,

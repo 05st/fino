@@ -3,16 +3,16 @@ infl - 2
 infl * 3
 post ! 5
 
-fn (+) : u32 -> u32 -> u32
+fn (+) : int -> int -> int
     a b = a
 
-fn (-) : u32 -> u32 -> u32
+fn (-) : int -> int -> int
     a b = b
 
-fn (*) : u32 -> u32 -> u32
+fn (*) : int -> int -> int
     a b = a + b
 
-fn (!) : u32 -> u32
+fn (!) : int -> int
     n = n - 2
 
-let test : u32 = (+) 10! 42
+let test : int = 10! + 42

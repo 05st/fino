@@ -9,7 +9,7 @@
         inner_type value;\
     } name;\
     name* name##_new(inner_type v) {\
-        name* box = GC_MALLOC(sizeof(name));\
+        name* box = GC_malloc(sizeof(name));\
         box->value = v;\
         return box;\
     }\

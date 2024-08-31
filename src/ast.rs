@@ -22,6 +22,12 @@ pub enum ExprKind {
         fun: Box<Expr>,
         arg: Box<Expr>,
     },
+    Extern {
+        fun_name: String,
+        args: Vec<Expr>,
+        // Extern calls can only have a primitive type result
+        prim_type: Type,
+    },
     Lam {
         param_name: String,
         body: Box<Expr>,
@@ -81,22 +87,11 @@ pub enum Export {
     },
 }
 
-// Externs are treated as an item by the name resolver / type checker. It is up
-// to the programmer to ensure the function exists.
-#[derive(Debug)]
-pub struct Extern {
-    pub name: String,
-    pub type_scheme: TypeScheme,
-    pub location: Location,
-    pub definition_id: Option<DefinitionId>,
-}
-
 #[derive(Debug)]
 pub struct Module {
     pub module_path: Vec<String>,
     pub imports: Vec<Import>,
     pub exports: Vec<Export>,
-    pub externs: Vec<Extern>,
     pub items: Vec<Item>,
     pub module_id: Option<ModuleId>,
 }

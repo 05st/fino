@@ -83,6 +83,9 @@ pub enum Token {
     #[token(")")]
     RightParen,
 
+    #[token(",")]
+    Comma,
+
     #[token("=")]
     Equal,
     #[token("|")]
@@ -112,10 +115,12 @@ pub enum Token {
     // reserved keywords / operators.
     #[regex(r"[\+\-*\/^!|<>=?$@#%:]+", priority = 1, callback = |lex| lex.slice().to_owned())]
     Operator(String),
-    #[regex(r"[A-Z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
+    #[regex(r"[A-Z][A-Za-z0-9_']*", priority = 1, callback = |lex| lex.slice().to_owned())]
     UpperIdentifier(String),
-    #[regex(r"[a-z]\w*", priority = 1, callback = |lex| lex.slice().to_owned())]
+    #[regex(r"[a-z][A-Za-z0-9_']*", priority = 1, callback = |lex| lex.slice().to_owned())]
     LowerIdentifier(String),
+    #[regex(r"#[A-Za-z0-9_]+", priority = 1, callback = |lex| lex.slice().strip_prefix('#').unwrap().to_owned())]
+    ExternIdentifier(String),
 
     // The indent token also consumes a newline to distinguish it from whitespace
     // which is skipped by the Space token.
@@ -245,6 +250,7 @@ impl Display for Token {
             Token::LitUnit => write!(f, "'()'"),
             Token::LeftParen => write!(f, "'('"),
             Token::RightParen => write!(f, "')'"),
+            Token::Comma => write!(f, "','"),
             Token::Equal => write!(f, "'='"),
             Token::Bar => write!(f, "'|'"),
             Token::Colon => write!(f, "':'"),
@@ -257,6 +263,7 @@ impl Display for Token {
             Token::Operator(_) => write!(f, "operator"),
             Token::UpperIdentifier(_) => write!(f, "uppercase identifier"),
             Token::LowerIdentifier(_) => write!(f, "lowercase identifier"),
+            Token::ExternIdentifier(_) => write!(f, "extern identifier"),
             Token::Indent => write!(f, "indentation"),
             Token::Dedent => write!(f, "de-indentation"),
             Token::Newline => write!(f, "newline"),

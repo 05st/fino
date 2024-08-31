@@ -110,6 +110,15 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 ).unwrap().try_as_basic_value().unwrap_left()
             }
 
+            mir::Expr::Extern { fun_name, args } => {
+                // Just a normal, uncurried function call
+                self.builder.build_call(
+                    self.get_function(fun_name.as_str()),
+                    args.into_iter().map(|arg| self.compile_expr(arg).into()).collect::<Vec<_>>().as_slice(),
+                    "_extern_call",
+                ).unwrap().try_as_basic_value().unwrap_left()
+            }
+
             mir::Expr::If { cond, texpr, fexpr } => {
                 let then_block = self.append_block("if_then");
                 let else_block = self.append_block("if_else");
