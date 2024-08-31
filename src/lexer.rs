@@ -1,23 +1,15 @@
 use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
-use logos::{skip, Filter, FilterResult, Lexer, Logos};
+use logos::{skip, Filter, Lexer, Logos};
 
 use crate::{error::{Error, ErrorKind}, location::{Location, Span}, parser::Precedence};
 
-#[derive(Clone, Debug, PartialEq, Default)]
-pub enum LexerError {
-    UnexpectedIndent(usize),
-    #[default]
-    Default,
-}
-
 pub struct LexerState<'a> {
-    indents: Vec<usize>,
     operator_map: &'a mut HashMap<String, Precedence>,
 }
 
 #[derive(Clone, Debug, Logos, PartialEq)]
-#[logos(extras = LexerState<'s>, error = LexerError)]
+#[logos(extras = LexerState<'s>)]
 pub enum Token {
     #[token("extern")]
     KwExtern,
@@ -124,9 +116,7 @@ pub enum Token {
 
     // The indent token also consumes a newline to distinguish it from whitespace
     // which is skipped by the Space token.
-    #[regex(r"\n[ \t]*", whitespace_callback)]
-    Indent,
-    Dedent,
+    #[regex(r"\n")]
     Newline,
 
     #[regex(r"[ \t]+", skip)]
@@ -159,60 +149,19 @@ fn fixity_decl_callback(lexer: &mut Lexer<Token>) -> Filter<()> {
     Filter::Skip
 }
 
-fn whitespace_callback(lexer: &mut Lexer<Token>) -> FilterResult<Token, LexerError> {
-    let new_col = lexer
-        .slice()
-        .chars()
-        .filter(|ch| *ch == ' ' || *ch == '\t')
-        .count();
-
-    let indents = &mut lexer.extras.indents;
-    let cur_col = indents.last().copied().unwrap_or(0);
-
-    match new_col.cmp(&cur_col) {
-        std::cmp::Ordering::Less => {
-            if indents.contains(&new_col) || new_col == 0 {
-                // Drop all indentation levels greater than new_col
-                while indents.last().copied().unwrap_or(0) != new_col {
-                    indents.pop();
-                }
-
-                FilterResult::Emit(Token::Dedent)
-            } else {
-                FilterResult::Error(LexerError::UnexpectedIndent(new_col))
-            }
-        }
-
-        std::cmp::Ordering::Equal => FilterResult::Emit(Token::Newline),
-
-        std::cmp::Ordering::Greater => {
-            indents.push(new_col);
-            FilterResult::Emit(Token::Indent)
-        }
-    }
-}
-
 pub fn tokenize(source: &String, filepath: PathBuf, operator_map: &mut HashMap<String, Precedence>) -> Result<Vec<(Token, Span)>, Error> {
     let mut tokens = Vec::new();
 
     let lexer = Token::lexer_with_extras(source, LexerState {
-        indents: Vec::new(),
         operator_map,
     }).spanned();
     
     for lex in lexer {
         match lex {
             (Ok(token), span) => tokens.push((token, span)),
-            (Err(lexer_error), span) => return Err(
-                // Translate lexer errors
-                match lexer_error {
-                    LexerError::UnexpectedIndent(size) => {
-                        Error::new(ErrorKind::UnexpectedIndent(size), Location::new(filepath, span))
-                    }
-                    LexerError::Default => {
-                        Error::new(ErrorKind::UnknownToken, Location::new(filepath, span))
-                    }
-                }
+            (Err(_), span) => return Err(
+                // Translate lexer error
+                Error::new(ErrorKind::UnknownToken, Location::new(filepath, span))
             ),
         }
     }
@@ -264,8 +213,6 @@ impl Display for Token {
             Token::UpperIdentifier(_) => write!(f, "uppercase identifier"),
             Token::LowerIdentifier(_) => write!(f, "lowercase identifier"),
             Token::ExternIdentifier(_) => write!(f, "extern identifier"),
-            Token::Indent => write!(f, "indentation"),
-            Token::Dedent => write!(f, "de-indentation"),
             Token::Newline => write!(f, "newline"),
             Token::Space => write!(f, "space"),
             Token::Comment => write!(f, "comment"),

@@ -12,7 +12,7 @@ pub enum ErrorKind {
     // Parser errors
     UnknownToken,
     ExpectedOneOf(Token, Vec<String>),
-    UnexpectedIndent(usize),
+    InvalidIndentation(usize, usize),
     UndeclaredOperator(String),
     InvalidPrefixOperator(String),
     MultipleMainDefinitions,
@@ -75,7 +75,7 @@ impl Display for ErrorKind {
                     write!(f, "Expected one of {} here, got {}", allowed.join(", "), got)
                 }
             }
-            UnexpectedIndent(size) => write!(f, "Unexpected indent of size {} here", size),
+            InvalidIndentation(got, exp) => write!(f, "Invalid indentation of size {} here, expected at least {}", got, exp),
             UndeclaredOperator(oper) => write!(f, "Undeclared operator {} encountered here", oper),
             InvalidPrefixOperator(oper) => write!(f, "Invalid prefix operator {}", oper),
             MultipleMainDefinitions => write!(f, "Found multiple main definitions"),
