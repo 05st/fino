@@ -1,7 +1,14 @@
 import prelude
 
 fn pd : int -> unit
-    x = if x > 8 then print_char '#' else if x > 4 then print_char '+' else if x > 2 then print_char '.' else print_char ' '
+    x =
+        if x > 8 then
+            print_char '#'
+        else if x > 4 then
+            print_char '+'
+        else if x > 2 then
+            print_char '.'
+        else print_char ' '
 
 fn converge : int -> float -> float -> float -> float -> int
     iters cr ci r i =
