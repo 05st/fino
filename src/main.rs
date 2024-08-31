@@ -48,9 +48,6 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
     typecheck_program(&mut compiler_cache)?;
 
     let mir = transform_program(&mut compiler_cache);
-
-    println!("{:#?}", mir);
-
     compile_llvm(mir);
 
     Ok(())

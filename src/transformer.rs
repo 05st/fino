@@ -4,7 +4,7 @@ use crate::{ast, cache::{CompilerCache, DefinitionId}, mir};
 
 struct Transformer<'a> {
     compiler_cache: &'a mut CompilerCache,
-    globals: Vec<mir::Global>,
+    globals: Vec<mir::Toplevel>,
     functions: HashSet<DefinitionId>,
     misc_name_count: usize,
 }
@@ -102,7 +102,7 @@ impl<'a> Transformer<'a> {
 
                 let transformed_body = self.transform_expr(body);
 
-                self.globals.push(mir::Global::Function {
+                self.globals.push(mir::Toplevel::Function {
                     name: fun_name.clone(),
                     env: free_vars.clone(),
                     param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
@@ -140,13 +140,13 @@ impl<'a> Transformer<'a> {
 
             let global = match &item.expr.kind {
                 ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
-                    // If the expression is a lambda, create a function instead
+                    // If the expression is a lambda, create a MIR function instead
                     // Note the expression should have zero free variables.
                     let transformed_body = self.transform_expr(body);
 
                     self.functions.insert(item.definition_id.clone().unwrap());
 
-                    mir::Global::Function {
+                    mir::Toplevel::Function {
                         name,
                         env: Vec::new(),
                         param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
@@ -157,7 +157,7 @@ impl<'a> Transformer<'a> {
 
                 _ => {
                     let transformed_body = self.transform_expr(&item.expr);
-                    mir::Global::Variable {
+                    mir::Toplevel::Variable {
                         name,
                         body: transformed_body,
                     }
@@ -169,7 +169,7 @@ impl<'a> Transformer<'a> {
     }
 }
 
-pub fn transform_program(compiler_cache: &mut CompilerCache) -> Vec<mir::Global> {
+pub fn transform_program(compiler_cache: &mut CompilerCache) -> Vec<mir::Toplevel> {
     let mut transformer = Transformer::new(compiler_cache);
 
     let mut queue = Vec::new();

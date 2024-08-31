@@ -16,4 +16,4 @@ let twenty : int = 2! * 10 * 2 * 42!
 
 let whatprev : char = let f = \x y -> y in if f false true then 'x' else 'z'
 
-let what : char = let f = \q -> q in f 'x'
+let what : char = let f = \q c -> c in f 'x' 'y'

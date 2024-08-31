@@ -25,7 +25,7 @@ pub enum Expr {
 }
 
 #[derive(Debug, Clone)]
-pub enum Global {
+pub enum Toplevel {
     Function {
         name: String,
         env: Vec<String>,

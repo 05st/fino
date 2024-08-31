@@ -19,12 +19,12 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                                 .as_pointer_value()
                                 .as_basic_value_enum()
                         } else {
-                            let ptr = self.get_global(var_name.as_str()).as_pointer_value();
-                            self.builder.build_load(
-                                self.ptr_type(),
-                                ptr,
-                                var_name.as_str(),
-                            ).unwrap().as_basic_value_enum()
+                            let var_fn = self.get_function(var_name.as_str());
+                            self.builder.build_call(
+                                var_fn,
+                                &[],
+                                format!("_{}_call", var_name).as_str(),
+                            ).unwrap().try_as_basic_value().unwrap_left()
                         }
                     }
                 }

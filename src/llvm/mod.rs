@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, path::Path};
 
 use inkwell::{
     basic_block::BasicBlock,
@@ -7,7 +7,7 @@ use inkwell::{
     module::Module,
     types::{PointerType, StructType},
     values::{
-        FunctionValue, GlobalValue, PointerValue
+        FunctionValue, PointerValue
     },
     AddressSpace
 };
@@ -15,7 +15,7 @@ use inkwell::{
 use crate::mir;
 
 mod expr;
-mod global;
+mod toplevel;
 mod literal;
 
 struct LLVMCodegen<'a, 'ctx> {
@@ -27,9 +27,7 @@ struct LLVMCodegen<'a, 'ctx> {
     functions: HashSet<String>,
 
     cur_function: Option<FunctionValue<'ctx>>,
-
     entry_point: Option<FunctionValue<'ctx>>,
-    global_init_fns: Vec<FunctionValue<'ctx>>,
 }
 
 impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
@@ -42,16 +40,11 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
             functions: HashSet::new(),
             cur_function: None,
             entry_point: None,
-            global_init_fns: Vec::new(),
         }
     }
 
     fn get_function(&self, name: &str) -> FunctionValue<'ctx> {
         self.module.get_function(name).expect(format!("Unknown LLVM function {}", name).as_str())
-    }
-
-    fn get_global(&self, name: &str) -> GlobalValue<'ctx> {
-        self.module.get_global(name).expect(format!("Unknown LLVM global {}", name).as_str())
     }
 
     fn ptr_type(&self) -> PointerType<'ctx> {
@@ -118,11 +111,6 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
 
         self.enter_fn_block(main_fn);
 
-        // Set up globals
-        for global_init_fn in &self.global_init_fns {
-            self.builder.build_call(*global_init_fn, &[], "_global_init_call").unwrap();
-        }
-
         // If there is an entry point
         if let Some(entry_fn) = self.entry_point {
             // Call fino main function
@@ -137,11 +125,12 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         self.builder.build_return(None).unwrap();
 
         // Output to file
-        self.module.print_to_file("test.ll").unwrap();
+        self.module.print_to_file("a.ll").unwrap();
+        self.module.write_bitcode_to_path(Path::new("a.bc"));
     }
 }
 
-pub fn compile_llvm(mir: Vec<mir::Global>) {
+pub fn compile_llvm(mir: Vec<mir::Toplevel>) {
     let context = Context::create();
     let builder = context.create_builder();
     let module = context.create_module("fino_llvm");
@@ -150,8 +139,8 @@ pub fn compile_llvm(mir: Vec<mir::Global>) {
 
     codegen.declare_runtime();
 
-    for global in mir.iter() {
-        codegen.compile_global(global);
+    for toplevel in mir.iter() {
+        codegen.compile_toplevel(toplevel);
     }
 
     codegen.finish();
