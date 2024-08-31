@@ -1,0 +1,6 @@
+infl ++ 5
+
+export (++)
+
+fn (++): str -> str -> str
+    a b = extern #_fino_string_concat(a, b) : str

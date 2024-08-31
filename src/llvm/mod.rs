@@ -136,7 +136,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         );
     }
 
-    fn finish(&mut self) {
+    fn finish(&mut self, path: &Path) {
         // Add main function
         let main_fn_type = self.context.void_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_fn_type, None);
@@ -157,12 +157,12 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         self.builder.build_return(None).unwrap();
 
         // Output to file
-        self.module.print_to_file("a.ll").unwrap();
-        self.module.write_bitcode_to_path(Path::new("a.bc"));
+        self.module.strip_debug_info();
+        self.module.write_bitcode_to_path(path);
     }
 }
 
-pub fn compile_llvm(mir: Vec<mir::Toplevel>) {
+pub fn compile_llvm(mir: Vec<mir::Toplevel>, path: &Path) {
     let context = Context::create();
     let builder = context.create_builder();
     let module = context.create_module("fino_llvm");
@@ -179,5 +179,5 @@ pub fn compile_llvm(mir: Vec<mir::Toplevel>) {
         codegen.compile_toplevel(toplevel);
     }
 
-    codegen.finish();
+    codegen.finish(path);
 }

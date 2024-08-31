@@ -1,0 +1,4 @@
+import prelude
+
+fn main : unit -> unit
+    a = a

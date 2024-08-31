@@ -35,29 +35,12 @@ struct Args {
     src: String,
 
     // Output path
-    #[arg(short, long, default_value = "a", help = "Output path")]
+    #[arg(short, long, default_value = "a.bc", help = "Output path")]
     out: String,
 }
 
-fn run_compiler(files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
-    let mut compiler_cache = CompilerCache::default();
-
-    parse_program(&mut compiler_cache, files, root)?;
-    sort_program(&mut compiler_cache)?;
-    resolve_program(&mut compiler_cache)?;
-    typecheck_program(&mut compiler_cache)?;
-
-    let mir = transform_program(&mut compiler_cache);
-    compile_llvm(mir);
-
-    Ok(())
-}
-
-fn main() {
-    let args = Args::parse();
-    let root = Path::new(&args.src);
-
-    let files = WalkDir::new(root)
+fn collect_fino_files(root: &Path) -> Vec<DirEntry> {
+    WalkDir::new(root)
         .into_iter()
         .map(|e| match e {
             Ok(entry) => entry,
@@ -69,9 +52,31 @@ fn main() {
                 .map(|s| s.ends_with(FINO_FILE_EXTENSION))
                 .unwrap_or(false)
         })
-        .collect::<Vec<DirEntry>>();
+        .collect::<Vec<DirEntry>>()
+}
 
-    if let Err(err) = run_compiler(files, root) {
+fn run_compiler(files: Vec<DirEntry>, root: &Path, out: &Path) -> Result<(), Error> {
+    let mut compiler_cache = CompilerCache::default();
+
+    parse_program(&mut compiler_cache, files, root)?;
+    sort_program(&mut compiler_cache)?;
+    resolve_program(&mut compiler_cache)?;
+    typecheck_program(&mut compiler_cache)?;
+
+    let mir = transform_program(&mut compiler_cache);
+    compile_llvm(mir, out);
+
+    Ok(())
+}
+
+fn main() {
+    let args = Args::parse();
+    let root = Path::new(&args.src);
+    let out = Path::new(&args.out);
+
+    let files = collect_fino_files(root);
+
+    if let Err(err) = run_compiler(files, root, out) {
         err.report();
     }
 }
