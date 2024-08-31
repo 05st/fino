@@ -1,4 +1,6 @@
 import prelude
 
-fn main : unit -> unit
-    a = a
+fn id : a -> a
+    x = x
+
+let main : unit = println_str (id "Hello, world!")

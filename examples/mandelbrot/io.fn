@@ -3,6 +3,7 @@ import string
 export print_str
 export println_str
 export print_char
+export println_char
 
 fn print_str : str -> unit
     s = extern #_fino_string_print(s) : unit
@@ -12,3 +13,6 @@ fn println_str : str -> unit
 
 fn print_char : char -> unit
     c = extern #_fino_char_print(c) : unit
+
+fn println_char : char -> unit
+    c = let a = print_char c in print_str "\n"

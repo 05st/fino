@@ -35,10 +35,10 @@ pub enum Toplevel {
         env: Vec<String>,
         param: String,
         body: Expr,
-        is_main: bool,
     },
     Variable {
         name: String,
         body: Expr,
+        is_main: bool,
     }
 }

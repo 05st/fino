@@ -1,15 +1,9 @@
 use std::{collections::{HashMap, HashSet}, path::Path};
 
 use inkwell::{
-    basic_block::BasicBlock,
-    builder::Builder,
-    context::Context,
-    module::Module,
-    types::{PointerType, StructType},
-    values::{
+    basic_block::BasicBlock, builder::Builder, context::Context, module::Module, types::{PointerType, StructType}, values::{
         FunctionValue, GlobalValue, PointerValue
-    },
-    AddressSpace
+    }, AddressSpace
 };
 
 use crate::mir;
@@ -157,6 +151,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         self.builder.build_return(None).unwrap();
 
         // Output to file
+        self.module.print_to_file(format!("{}.ll", path.display())).unwrap();
         self.module.strip_debug_info();
         self.module.write_bitcode_to_path(path);
     }

@@ -119,7 +119,6 @@ impl<'a> Transformer<'a> {
                     env: free_vars.clone(),
                     param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
                     body: transformed_body,
-                    is_main: false,
                 });
 
                 mir::Expr::Closure {
@@ -170,7 +169,6 @@ impl<'a> Transformer<'a> {
                         env: Vec::new(),
                         param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
                         body: transformed_body,
-                        is_main: item.is_main,
                     }
                 },
 
@@ -179,6 +177,7 @@ impl<'a> Transformer<'a> {
                     mir::Toplevel::Variable {
                         name,
                         body: transformed_body,
+                        is_main: item.is_main,
                     }
                 }
             };

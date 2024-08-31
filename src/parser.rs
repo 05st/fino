@@ -544,20 +544,8 @@ impl<'a> Parser<'a> {
         self.expect(Token::KwFn)?;
         let (name, span) = self.expect_identifier()?;
 
-        // Check if we parsed the main function
-        let is_main = name == "main";
-        if is_main && self.parsed_main {
-            return self.error(ErrorKind::MultipleMainFunctions, span);
-        }
-        self.parsed_main = is_main;
-
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
-
-        // The main function must have a unit -> unit type
-        if is_main && type_scheme.1 != Type::Fun(Box::new(Type::unit()), Box::new(Type::unit())) {
-            return self.error(ErrorKind::InvalidMainFunctionType, span);
-        }
 
         self.expect(Token::Indent)?;
 
@@ -598,7 +586,8 @@ impl<'a> Parser<'a> {
             expr,
             location: self.make_location(span),
             definition_id: None,
-            is_main,
+            // Fn definitions shouldn't be entry points
+            is_main: false,
         })
     }
 
@@ -607,8 +596,20 @@ impl<'a> Parser<'a> {
         self.expect(Token::KwLet)?;
         let (name, span) = self.expect_identifier()?;
 
+        // Check if we parsed the main definition
+        let is_main = name == "main";
+        if is_main && self.parsed_main {
+            return self.error(ErrorKind::MultipleMainDefinitions, span);
+        }
+        self.parsed_main = is_main;
+
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
+
+        // Main definition must have a unit type
+        if is_main && type_scheme.1 != Type::unit() {
+            return self.error(ErrorKind::InvalidMainDefinitionType, span);
+        }
 
         self.expect(Token::Equal)?;
         let expr = self.parse_expr()?;
@@ -621,8 +622,7 @@ impl<'a> Parser<'a> {
             expr,
             location: self.make_location(span),
             definition_id: None,
-            // Let-definitions shouldn't be an entry point
-            is_main: false,
+            is_main,
         })
     }
 
