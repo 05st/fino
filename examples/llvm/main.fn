@@ -7,12 +7,12 @@ let maybe : bool = false
 fn lmao : unit -> unit
     a = if true then a else if maybe then let thing = if maybe then a else () in thing else ()
 
+fn main : unit -> unit
+    x = let p = twenty in ()
+
 fn add : int -> int -> int
     a b = a
 
 let add10 : int -> int = add 10
 
 let twenty : int = let ignore = (extern #_fino_int_print(add10 10) : unit) in 0
-
-fn main : unit -> unit
-    x = let p = twenty in ()

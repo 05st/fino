@@ -3,13 +3,30 @@ use crate::mir;
 use super::LLVMCodegen;
 
 impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
-    pub fn compile_toplevel(&mut self, toplevel: &mir::Toplevel) {
+    pub fn declare_toplevel(&mut self, toplevel: &mir::Toplevel) {
         match toplevel {
-            mir::Toplevel::Function { name, param, env, body, is_main } => {
+            mir::Toplevel::Function { name, env: _, param: _, body: _, is_main } => {
                 let fn_type = self.ptr_type().fn_type(&[self.ptr_type().into()].repeat(2), false);
                 let fn_value = self.module.add_function(name.as_str(), fn_type, None);
-
                 self.functions.insert(name.clone());
+
+                // If entry point, set self.entry_point
+                if *is_main {
+                    self.entry_point = Some(fn_value);
+                }
+            }
+            mir::Toplevel::Variable { name, body: _ } => {
+                let fn_type = self.ptr_type().fn_type(&[], false);
+                self.module.add_function(name.as_str(), fn_type, None);
+            }
+        }
+    }
+
+    pub fn compile_toplevel(&mut self, toplevel: &mir::Toplevel) {
+        match toplevel {
+            mir::Toplevel::Function { name, param, env, body, is_main: _ } => {
+                // Function should have already been declared
+                let fn_value = self.get_function(name.as_str());
 
                 // Set and register parameter names
                 let env_ptr = fn_value.get_param_iter().nth(0).unwrap();
@@ -41,18 +58,10 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 }
 
                 self.builder.build_return(Some(&self.compile_expr(body))).unwrap();
-
-                // If entry point, set self.entry_point
-                if *is_main {
-                    self.entry_point = Some(fn_value);
-                }
             }
 
             mir::Toplevel::Variable { name, body } => {
-                let fn_type = self.ptr_type().fn_type(&[], false);
-                let fn_value = self.module.add_function(name.as_str(), fn_type, None);
-                self.enter_fn_block(fn_value);
-
+                self.enter_fn_block(self.get_function(name.as_str()));
                 self.builder.build_return(Some(&self.compile_expr(body))).unwrap();
             }
         }

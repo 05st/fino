@@ -140,6 +140,10 @@ pub fn compile_llvm(mir: Vec<mir::Toplevel>) {
     codegen.declare_runtime();
 
     for toplevel in mir.iter() {
+        codegen.declare_toplevel(toplevel);
+    }
+
+    for toplevel in mir.iter() {
         codegen.compile_toplevel(toplevel);
     }
 
