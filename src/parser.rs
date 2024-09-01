@@ -571,8 +571,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Parse and desugar top-level function definition
-    fn parse_fn_item(&mut self) -> Result<Item, Error> {
+    // Parse and desugar toplevel function definition
+    fn parse_fn_def(&mut self) -> Result<Toplevel, Error> {
         self.expect(Token::KwFn)?;
         let (name, span) = self.expect_identifier()?;
 
@@ -613,23 +613,24 @@ impl<'a> Parser<'a> {
                 location: self.make_location(span),
             });
 
-        Ok(Item {
+        Ok(Toplevel {
+            kind: ToplevelKind::Let {
+                type_scheme,
+                expr,
+                is_main: false,
+            },
             name,
-            type_scheme,
-            expr,
             location: self.make_location(span),
             definition_id: None,
-            // Fn definitions shouldn't be entry points
-            is_main: false,
         })
     }
 
-    // Parse top-level let-definition
-    fn parse_let_item(&mut self) -> Result<Item, Error> {
+    // Parse toplevel let-definition
+    fn parse_let_def(&mut self) -> Result<Toplevel, Error> {
         self.expect(Token::KwLet)?;
         let (name, span) = self.expect_identifier()?;
 
-        // Check if we parsed the main definition
+        // Check if we parsed the main let-definition
         let is_main = name == "main";
         if is_main && self.parsed_main {
             return self.error(ErrorKind::MultipleMainDefinitions, span);
@@ -639,7 +640,7 @@ impl<'a> Parser<'a> {
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
 
-        // Main definition must have a unit type
+        // Main let-definition must have a unit type
         if is_main && type_scheme.1 != Type::unit() {
             return self.error(ErrorKind::InvalidMainDefinitionType, span);
         }
@@ -647,13 +648,15 @@ impl<'a> Parser<'a> {
         self.expect(Token::Equal)?;
         let expr = self.parse_expr()?;
 
-        Ok(Item {
+        Ok(Toplevel {
+            kind: ToplevelKind::Let {
+                type_scheme,
+                expr,
+                is_main,
+            },
             name,
-            type_scheme,
-            expr,
             location: self.make_location(span),
             definition_id: None,
-            is_main,
         })
     }
 
@@ -681,8 +684,8 @@ impl<'a> Parser<'a> {
                 module_id: None,
             }
         } else {
-            Export::Item {
-                item_name: self.expect_identifier()?.0,
+            Export::Toplevel {
+                name: self.expect_identifier()?.0,
                 location: self.make_location(span),
                 definition_id: None,
             }
@@ -698,7 +701,7 @@ impl<'a> Parser<'a> {
 
         let mut imports = Vec::new();
         let mut exports = Vec::new();
-        let mut items = Vec::new();
+        let mut toplevels = Vec::new();
 
         loop {
             self.skip_newlines();
@@ -707,8 +710,8 @@ impl<'a> Parser<'a> {
                 match self.peek() {
                     Token::KwImport => imports.push(self.parse_import()?),
                     Token::KwExport => exports.push(self.parse_export()?),
-                    Token::KwFn => items.push(self.parse_fn_item()?),
-                    Token::KwLet => items.push(self.parse_let_item()?),
+                    Token::KwFn => toplevels.push(self.parse_fn_def()?),
+                    Token::KwLet => toplevels.push(self.parse_let_def()?),
 
                     _ => {
                         let (token, span) = self.next_with_span()?;
@@ -727,7 +730,7 @@ impl<'a> Parser<'a> {
             module_path,
             imports,
             exports,
-            items,
+            toplevels,
             module_id: None,
         });
         

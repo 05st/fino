@@ -14,7 +14,7 @@ pub enum ExprKind {
     Lit(Literal),
     Var {
         // A variable can be a qualified or unqualified name. A variable written as a
-        // qualified names can only refer to a top-level definition.
+        // qualified names can only refer to a toplevel definition.
         name: Name,
         definition_id: Option<DefinitionId>,
     },
@@ -52,17 +52,23 @@ pub struct Expr {
     pub location: Location,
 }
 
-// An item is a top-level let-definition. Fn definitions are desugared into curried
-// lambda expressions by the parser. The fully qualified name of the item is
-// given by module name ++ name;
 #[derive(Debug)]
-pub struct Item {
+pub enum ToplevelKind {
+    // Fn definitions are desugared into curried lambda expressions by the parser.
+    Let {
+        type_scheme: TypeScheme,
+        expr: Expr,
+        is_main: bool,
+    },
+    Type { },
+}
+
+#[derive(Debug)]
+pub struct Toplevel {
+    pub kind: ToplevelKind,
     pub name: String,
-    pub type_scheme: TypeScheme,
-    pub expr: Expr,
     pub location: Location,
     pub definition_id: Option<DefinitionId>,
-    pub is_main: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -74,11 +80,10 @@ pub struct Import {
 
 #[derive(Debug)]
 pub enum Export {
-    Item {
-        item_name: String,
+    Toplevel {
+        name: String,
         location: Location,
         definition_id: Option<DefinitionId>,
-
     },
     Module {
         module_path: Vec<String>,
@@ -92,6 +97,6 @@ pub struct Module {
     pub module_path: Vec<String>,
     pub imports: Vec<Import>,
     pub exports: Vec<Export>,
-    pub items: Vec<Item>,
+    pub toplevels: Vec<Toplevel>,
     pub module_id: Option<ModuleId>,
 }

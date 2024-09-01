@@ -24,7 +24,7 @@ pub enum ErrorKind {
 
     // Name resolution errors
     UnknownVariable(Vec<String>),
-    Redefinition(Vec<String>), // Only possible with top-level definitions
+    Redefinition(Vec<String>), // Only possible with toplevel definitions
     MultipleDefinitions(String), // Only possible when looking up unqualified name
     ExportedUnimportedModule(Vec<String>),
     AlreadyImportedModule(Vec<String>),

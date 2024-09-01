@@ -18,7 +18,7 @@ struct NameResolver<'a> {
 #[derive(Clone, Debug)]
 struct Environment {
     // BTreeMap is faster for iteration
-    items: BTreeMap<Vec<String>, DefinitionId>,
+    toplevels: BTreeMap<Vec<String>, DefinitionId>,
     // Stack of local scopes
     scopes: VecDeque<im::HashMap<String, DefinitionId>>,
 }
@@ -26,24 +26,24 @@ struct Environment {
 impl Environment {
     fn new() -> Environment {
         Environment {
-            items: BTreeMap::new(),
+            toplevels: BTreeMap::new(),
             scopes: VecDeque::new(),
         }
     }
 
-    // Move all top-level definitions from other environment into self
+    // Move all toplevels from other environment into self
     fn extend(&mut self, other: Environment) {
-        self.items.extend(other.items);
+        self.toplevels.extend(other.toplevels);
     }
 
-    fn insert_item(&mut self, module_path: &Vec<String>, item_name: String, definition_id: DefinitionId, location: &Location) -> Result<(), Error> {
+    fn insert_toplevel(&mut self, module_path: &Vec<String>, name: String, definition_id: DefinitionId, location: &Location) -> Result<(), Error> {
         let mut qualified_name = module_path.clone();
-        qualified_name.push(item_name);
+        qualified_name.push(name);
 
-        match self.items.get(&qualified_name) {
+        match self.toplevels.get(&qualified_name) {
             Some(_) => Err(Error::new(ErrorKind::Redefinition(qualified_name), location.clone())),
             None => {
-                self.items.insert(qualified_name, definition_id);
+                self.toplevels.insert(qualified_name, definition_id);
                 Ok(())
             }
         }
@@ -66,7 +66,7 @@ impl Environment {
     }
 
     fn lookup_qualified_name(&self, name: &Vec<String>, location: &Location) -> Result<DefinitionId, Error> {
-        match self.items.get(name) {
+        match self.toplevels.get(name) {
             Some(definition_id) => Ok(definition_id.clone()),
             None => Err(Error::new(ErrorKind::UnknownVariable(name.clone()), location.clone())),
         }
@@ -81,10 +81,10 @@ impl Environment {
             }
         }
 
-        // Otherwise, iterate through all items in scope. This is suboptimal, since
-        // we only need to check items that have the same unqualified portion of their
+        // Otherwise, iterate through all toplevels in scope. This is suboptimal, since
+        // we only need to check toplevels that have the same unqualified portion of their
         // qualified name as the unqualified name we are searching for.
-        let candidates = self.items
+        let candidates = self.toplevels
             .iter()
             .filter(|(qualified_name, _)| qualified_name.last().unwrap() == name)
             .collect::<Vec<_>>();
@@ -117,8 +117,8 @@ impl<'a> NameResolver<'a> {
         let mut mangled_name = self.module_path.clone().unwrap();
         mangled_name.push(name);
 
-        // Mangle local definition names, we don't want to mangle top-level names since
-        // libraries can export top-level definitions, and definition_ids aren't the same
+        // Mangle local definition names, we don't want to mangle toplevel names since
+        // libraries can export toplevel definitions, and definition_ids aren't the same
         // between compiler runs.
         if local {
             mangled_name.push(self.definition_count.to_string());
@@ -200,7 +200,7 @@ impl<'a> NameResolver<'a> {
         }
     }
 
-    // Insert a scope into module_exports which contains all top-level definitions
+    // Insert a scope into module_exports which contains all toplevel definitions
     // exported by the module. Assumes all definition ids have been resolved in the
     // module.
     fn setup_module_exports(&mut self, module: &Module) -> Result<(), Error> {
@@ -208,10 +208,10 @@ impl<'a> NameResolver<'a> {
 
         for export in &module.exports {
             match export {
-                Export::Item { item_name, location, definition_id } => {
-                    exports_env.insert_item(
+                Export::Toplevel { name, location, definition_id } => {
+                    exports_env.insert_toplevel(
                         &module.module_path,
-                        item_name.clone(),
+                        name.clone(),
                         definition_id.clone().unwrap(),
                         location,
                     )?;
@@ -231,16 +231,16 @@ impl<'a> NameResolver<'a> {
         self.module_path = Some(module.module_path.clone());
         self.environment = Environment::new();
 
-        // Set up definitions for items
-        for item in module.items.iter_mut() {
-            let definition_id = self.new_definition(item.name.clone(), item.location.clone(), false);
-            item.definition_id = Some(definition_id.clone());
+        // Set up definitions for toplevels
+        for toplevel in module.toplevels.iter_mut() {
+            let definition_id = self.new_definition(toplevel.name.clone(), toplevel.location.clone(), false);
+            toplevel.definition_id = Some(definition_id.clone());
 
-            self.environment.insert_item(
+            self.environment.insert_toplevel(
                 &module.module_path,
-                item.name.clone(),
+                toplevel.name.clone(),
                 definition_id,
-                &item.location,
+                &toplevel.location,
             )?;
         }
 
@@ -260,8 +260,8 @@ impl<'a> NameResolver<'a> {
         }
         for export in module.exports.iter_mut() {
             match export {
-                Export::Item { item_name, location, ref mut definition_id } => {
-                    *definition_id = Some(self.environment.lookup_unqualified_name(item_name, location)?);
+                Export::Toplevel { name, location, ref mut definition_id } => {
+                    *definition_id = Some(self.environment.lookup_unqualified_name(name, location)?);
                 }
                 Export::Module { module_path, location, module_id } => {
                     // If the exported module is not in imported_modules, then it exists but isn't imported
@@ -272,10 +272,15 @@ impl<'a> NameResolver<'a> {
             }
         }
 
-        // Resolve items
+        // Resolve toplevels
         self.process_module_imports(module);
-        for item in module.items.iter_mut() {
-            self.resolve_expr(&mut item.expr)?;
+        for toplevel in module.toplevels.iter_mut() {
+            match &mut toplevel.kind {
+                ToplevelKind::Let { type_scheme: _, ref mut expr, is_main: _ } => {
+                    self.resolve_expr(expr)?;
+                }
+                ToplevelKind::Type {  } => todo!(),
+            }
         }
 
         self.setup_module_exports(module)?;

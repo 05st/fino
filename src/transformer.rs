@@ -36,7 +36,7 @@ impl<'a> Transformer<'a> {
 
             ast::ExprKind::Var { name: _, definition_id } => {
                 let definition_id = definition_id.as_ref().unwrap();
-                // We don't want to treat references to top-level items as free variables
+                // We don't want to treat references to let-definitions as free variables
                 if self.compiler_cache[definition_id].local && !scope.contains(definition_id) {
                     free_vars.push(self.get_mangled_name(definition_id));
                 }
@@ -146,43 +146,54 @@ impl<'a> Transformer<'a> {
     }
 
     fn transform_module(&mut self, module: &ast::Module) -> () {
-        // If the top expression of an item is a lambda, create a MIR function instead
-        // Note all top expressions in items should have zero free variables.
+        // Declare all toplevels first
+        for toplevel in &module.toplevels {
+            match &toplevel.kind {
+                ast::ToplevelKind::Let { type_scheme: _, expr, is_main: _ } => {
+                    // If the top expression of a let-definition is a lambda, create a MIR function instead
+                    // Note all top expressions in let-definitions should have zero free variables.
+                    if let ast::ExprKind::Lam { .. } = &expr.kind {
+                        self.functions.insert(toplevel.definition_id.clone().unwrap());
+                    }
+                }
 
-        // Declare all functions first
-        for item in &module.items {
-            if let ast::ExprKind::Lam { .. } = &item.expr.kind {
-                self.functions.insert(item.definition_id.clone().unwrap());
+                ast::ToplevelKind::Type {  } => todo!(),
             }
         }
 
-        // Transform items
-        for item in &module.items {
-            let name = self.get_mangled_name(item.definition_id.as_ref().unwrap());
+        // Transform toplevels
+        for toplevel in &module.toplevels {
+            let name = self.get_mangled_name(toplevel.definition_id.as_ref().unwrap());
 
-            let global = match &item.expr.kind {
-                ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
-                    let transformed_body = self.transform_expr(body);
+            match &toplevel.kind {
+                ast::ToplevelKind::Let { type_scheme: _, expr, is_main } => {
+                    let global = match &expr.kind {
+                        ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
+                            let transformed_body = self.transform_expr(body);
 
-                    mir::Toplevel::Function {
-                        name,
-                        env: Vec::new(),
-                        param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
-                        body: transformed_body,
-                    }
-                },
+                            mir::Toplevel::Function {
+                                name,
+                                env: Vec::new(),
+                                param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
+                                body: transformed_body,
+                            }
+                        },
 
-                _ => {
-                    let transformed_body = self.transform_expr(&item.expr);
-                    mir::Toplevel::Variable {
-                        name,
-                        body: transformed_body,
-                        is_main: item.is_main,
-                    }
+                        _ => {
+                            let transformed_body = self.transform_expr(expr);
+                            mir::Toplevel::Variable {
+                                name,
+                                body: transformed_body,
+                                is_main: *is_main,
+                            }
+                        }
+                    };
+
+                    self.globals.push(global);
                 }
-            };
 
-            self.globals.push(global);
+                ast::ToplevelKind::Type {  } => todo!(),
+            }
         }
     }
 }

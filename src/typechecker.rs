@@ -53,7 +53,7 @@ impl<'a> TypeChecker<'a> {
 
             ExprKind::Var { name: _, definition_id } => {
                 // Variable is guaranteed to be defined after name resolution, either in the
-                // local scope or as a top-level definition.
+                // local scope or as a toplevel definition.
                 let var_type = match env.get(&definition_id.as_ref().unwrap()) {
                     Some(ty) => ty.clone(),
                     None => {
@@ -245,20 +245,33 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn typecheck_module(&mut self, module: &Module) -> Result<(), Error> {
-        // Insert all top-level definitions into item_scheme_map
-        for item in &module.items {
-            self.type_schemes.insert(item.definition_id.clone().unwrap(), item.type_scheme.clone());
+        // Declare toplevels
+        for toplevel in &module.toplevels {
+            match &toplevel.kind {
+                // Insert all let-definitions into type_schemes
+                ToplevelKind::Let { type_scheme, expr: _, is_main: _ } => {
+                    self.type_schemes.insert(toplevel.definition_id.clone().unwrap(), type_scheme.clone());
+                }
+
+                ToplevelKind::Type {  } => todo!(),
+            }
         }
 
-        // Typecheck top-level definitions
-        for item in &module.items {
-            // MAYBE BUG:
-            // Not exactly sure what reset_unifications does. Maybe we should just set
-            // unification_table to InPlaceUnificationTable::new() instead?
-            self.unification_table.reset_unifications(|_| None);
+        // Typecheck toplevels
+        for toplevel in &module.toplevels {
+            match &toplevel.kind {
+                ToplevelKind::Let { type_scheme, expr, is_main: _ } => {
+                    // MAYBE BUG:
+                    // Not exactly sure what reset_unifications does. Maybe we should just set
+                    // unification_table to InPlaceUnificationTable::new() instead?
+                    self.unification_table.reset_unifications(|_| None);
 
-            let constraints = self.check_expr(im::HashMap::new(), &item.expr, item.type_scheme.1.clone());
-            self.solve_constraints(constraints)?;
+                    let constraints = self.check_expr(im::HashMap::new(), expr, type_scheme.1.clone());
+                    self.solve_constraints(constraints)?;
+                }
+
+                ToplevelKind::Type {  } => todo!(),
+            }
         }
 
         Ok(())
