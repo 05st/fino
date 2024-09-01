@@ -38,4 +38,11 @@ let ystep : float = 0.07
 let xmax : float = xmin +. xstep *. 78.0
 let ymax : float = ymin +. ystep *. 40.0
 
-let main : unit = plot xmin ymin
+fn repeat : int -> unit
+    n = if n < 10 then let a_ = plot xmin ymin in repeat (n + 1) else ()
+
+let main : unit = repeat 0
+//    let a_ = println_str "What is your name?" in
+//    let name = io.readline in
+//    let a_ = plot xmin ymin in
+//    println_str ("Hello, " ++ name ++ ".")

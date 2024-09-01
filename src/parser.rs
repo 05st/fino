@@ -240,6 +240,9 @@ impl<'a> Parser<'a> {
         self.expect(Token::LeftParen)?;
         let mut args = Vec::new();
         loop {
+            if let Token::RightParen = self.peek() {
+                break;
+            }
             let arg_expr = self.parse_expr()?;
             args.push(arg_expr);
             if let Token::RightParen = self.peek() {

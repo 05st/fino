@@ -17,18 +17,18 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
     pub fn compile_literal(&mut self, literal: &Literal) -> BasicValueEnum<'ctx> {
         match literal {
             Literal::Int(i) => {
-                let i32_value = self.context.i32_type().const_int(*i as u64, true);
-                self.build_new_literal_call("_fino_int_new", &[i32_value.into()])
+                let i64_value = self.context.i64_type().const_int(*i as u64, true);
+                self.build_new_literal_call("_fino_int_new", &[i64_value.into()])
             }
 
             Literal::Float(f) => {
-                let f32_value = self.context.f32_type().const_float(*f);
-                self.build_new_literal_call("_fino_float_new", &[f32_value.into()])
+                let f64_value = self.context.f64_type().const_float(*f);
+                self.build_new_literal_call("_fino_float_new", &[f64_value.into()])
             }
 
             Literal::String(s) => {
                 let unescaped = unescape(s).expect("Failed to unescape string literal");
-                let len_value = self.context.i32_type().const_int(unescaped.len() as u64, false);
+                let len_value = self.context.i64_type().const_int(unescaped.len() as u64, false);
                 let string_ptr = self.get_string_literal(unescaped).as_pointer_value();
                 self.build_new_literal_call("_fino_string_new", &[string_ptr.into(), len_value.into()])
             }

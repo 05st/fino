@@ -110,9 +110,9 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
 
         declare_wrapper_fns("_fino_bool", vec![self.context.bool_type().into()]);
         declare_wrapper_fns("_fino_char", vec![self.context.i8_type().into()]);
-        declare_wrapper_fns("_fino_int", vec![self.context.i32_type().into()]);
-        declare_wrapper_fns("_fino_float", vec![self.context.f32_type().into()]);
-        declare_wrapper_fns("_fino_string", vec![self.ptr_type().into(), self.context.i32_type().into()]);
+        declare_wrapper_fns("_fino_int", vec![self.context.i64_type().into()]);
+        declare_wrapper_fns("_fino_float", vec![self.context.f64_type().into()]);
+        declare_wrapper_fns("_fino_string", vec![self.ptr_type().into(), self.context.i64_type().into()]);
 
         let binary_oper_fns = vec![
             "_fino_int_add",
@@ -148,6 +148,12 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         self.module.add_function(
             "_fino_bool_get",
             self.context.bool_type().fn_type(&[self.ptr_type().into()], false),
+            None,
+        );
+
+        self.module.add_function(
+            "_fino_readline",
+            self.ptr_type().fn_type(&[], false),
             None,
         );
 

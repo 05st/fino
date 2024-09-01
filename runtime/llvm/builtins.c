@@ -50,14 +50,14 @@ void* _fino_unit_val = NULL;
 
 FINO_TYPE(int8_t, _fino_bool);
 FINO_TYPE(int8_t, _fino_char);
-FINO_TYPE(int32_t, _fino_int);
-FINO_TYPE(float, _fino_float);
+FINO_TYPE(int64_t, _fino_int);
+FINO_TYPE(double, _fino_float);
 
 FINO_NUMERICAL(_fino_int);
 FINO_NUMERICAL(_fino_float);
 
 FINO_PRINT(_fino_char, "%c");
-FINO_PRINT(_fino_int, "%d");
+FINO_PRINT(_fino_int, "%lld");
 FINO_PRINT(_fino_float, "%f");
 
 // Boolean operations
@@ -75,9 +75,9 @@ _fino_bool* _fino_bool_or(_fino_bool* a, _fino_bool* b) {
 // String
 typedef struct {
     char* buffer;
-    int32_t length;
+    int64_t length;
 } _fino_string;
-_fino_string* _fino_string_new(char* s, int32_t l) {
+_fino_string* _fino_string_new(char* s, int64_t l) {
     _fino_string* res = GC_malloc(sizeof(_fino_string));
     res->buffer = s;
     res->length = l;
@@ -88,9 +88,19 @@ void* _fino_string_print(_fino_string* str) {
     return NULL;
 }
 void* _fino_string_concat(_fino_string* a, _fino_string* b) {
-    int32_t res_len = a->length + b->length;
+    int64_t res_len = a->length + b->length;
     char* res_buf = GC_malloc(res_len + 1); // Add one for null character
     strcpy(res_buf, a->buffer);
     strcat(res_buf, b->buffer);
     return _fino_string_new(res_buf, res_len);
+}
+
+// User input
+_fino_string* _fino_readline() {
+    char line[1024];
+    scanf("%1023[^\n]", line);
+    int64_t len = strlen(line);
+    char* buffer = GC_malloc(len + 1);
+    strcpy(buffer, line);
+    return _fino_string_new(buffer, len);
 }

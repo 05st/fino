@@ -1,0 +1,9 @@
+import prelude
+
+fn factorial : int -> int
+    n = if n > 0 then
+            n * factorial (n - 1)
+        else
+            1
+
+let main : unit = println_int (factorial 20)
