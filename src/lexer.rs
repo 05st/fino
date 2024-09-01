@@ -58,7 +58,7 @@ pub enum Token {
     LitString(String),
     #[regex(r"-?[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
     LitInteger(i64),
-    #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse::<f64>().unwrap())]
+    #[regex(r"-?[0-9]+\.[0-9]+", |lex| lex.slice().parse::<f64>().unwrap())]
     LitFloat(f64),
     #[token("true", |_| true)]
     #[token("false", |_| false)]
