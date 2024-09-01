@@ -1,0 +1,4 @@
+import mandelbrot
+import factorial
+
+let main : unit = mandelbrot
