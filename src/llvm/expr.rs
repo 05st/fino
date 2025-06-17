@@ -33,7 +33,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 let fun_value = self.get_function(&fun_name);
 
                 // Create environment struct
-                let env_type = self.ptr_struct(env.len());
+                let env_type = self.ptr_struct_type(env.len());
                 let env_type_size = env_type.size_of().unwrap();
 
                 let env_values = env.into_iter().map(|v| self.variables[v.as_str()].as_basic_value_enum()).collect::<Vec<_>>();
@@ -57,7 +57,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 }
 
                 // Create closure struct
-                let closure_type = self.ptr_struct(2);
+                let closure_type = self.ptr_struct_type(2);
                 let closure_type_size = closure_type.size_of().unwrap();
 
                 let closure_ptr = self.builder.build_call(
@@ -87,13 +87,14 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
             }
 
             mir::Expr::App { closure, arg } => {
-                let compiled_arg = self.compile_expr(arg);
+                // Compile closure expression first so we have left-to-right evaluation
                 let compiled_closure = self.compile_expr(closure);
+                let compiled_arg = self.compile_expr(arg);
 
-                let closure_type = self.ptr_struct(2);
+                let closure_type = self.ptr_struct_type(2);
                 let closure_ptr = compiled_closure.as_any_value_enum().into_pointer_value();
 
-                let fun_type = self.ptr_type().fn_type(&[self.ptr_type().into()].repeat(2), false);
+                let fun_type = self.ptr_fn_type(2);
 
                 let env_ptr = self.builder.build_struct_gep(closure_type, closure_ptr, 0, "_closure_env_ind").unwrap();
                 let fun_ptr = self.builder.build_struct_gep(closure_type, closure_ptr, 1, "_closure_fn_ind").unwrap();

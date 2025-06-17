@@ -1,0 +1,12 @@
+export (++)
+export concat
+export append
+
+infl ++ 18
+let (++) : str -> str -> str = concat
+
+fn concat : str -> str -> str
+    a b = extern #_fino_string_concat(a, b) : str
+
+fn append : str -> char -> str
+    s c = extern #_fino_string_append(s, c) : str

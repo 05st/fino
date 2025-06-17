@@ -1,7 +1,8 @@
 use std::{
     collections::{BTreeSet, VecDeque},
     fs::read_to_string,
-    ops::Range, path::{Path, PathBuf}
+    ops::Range,
+    path::{Path, PathBuf},
 };
 
 use walkdir::DirEntry;
@@ -13,7 +14,7 @@ use crate::{
     lexer::{tokenize, Token},
     literal::Literal,
     location::{Location, Span},
-    types::{Type, TypeScheme, TypeVar}
+    types::{Type, TypeScheme, TypeVar},
 };
 
 pub enum Precedence {
@@ -72,13 +73,17 @@ impl<'a> Parser<'a> {
         // empty span at 0 bytes.
         self.previous
             .as_ref()
-            .map(|p| Range { start: p.1.end, end: p.1.end })
+            .map(|p| Range {
+                start: p.1.end,
+                end: p.1.end,
+            })
             .unwrap_or(Range { start: 0, end: 0 })
     }
 
     // Pop current token
     fn pop(&mut self) -> (Token, Span) {
-        let result = self.tokens
+        let result = self
+            .tokens
             .pop_front()
             .unwrap_or((Token::Eof, self.make_eof_span()));
         self.previous = Some(result.clone());
@@ -87,10 +92,7 @@ impl<'a> Parser<'a> {
 
     // Peek current token
     fn peek(&self) -> &Token {
-        self.tokens
-            .front()
-            .map(|t| &t.0)
-            .unwrap_or(&Token::Eof)
+        self.tokens.front().map(|t| &t.0).unwrap_or(&Token::Eof)
     }
 
     // Span of current token
@@ -109,7 +111,7 @@ impl<'a> Parser<'a> {
     }
 
     // Advance token stream and return popped (token, span)
-    fn next_with_span(&mut self) -> Result<(Token, Span), Error> {
+    fn next_with_span_keep_newlines(&mut self) -> Result<(Token, Span), Error> {
         let result = self.pop();
 
         // Ensure column position meets current block threshold
@@ -119,6 +121,13 @@ impl<'a> Parser<'a> {
             return self.error(ErrorKind::InvalidIndentation(column, thresh), result.1);
         }
 
+        Ok(result)
+    }
+
+    // Advance token stream and skip surrounding newlines
+    fn next_with_span(&mut self) -> Result<(Token, Span), Error> {
+        self.skip_newlines();
+        let result = self.next_with_span_keep_newlines()?;
         self.skip_newlines();
 
         Ok(result)
@@ -132,6 +141,8 @@ impl<'a> Parser<'a> {
     // Begins a new indented block, with indentation level of the current token,
     // which must be greater than of the previous block
     fn begin_block(&mut self) -> Result<(), Error> {
+        self.skip_newlines();
+
         let span = self.span();
 
         let column = span.start - self.line_start;
@@ -157,15 +168,19 @@ impl<'a> Parser<'a> {
         if current == expected {
             Ok(span)
         } else {
-            self.error(ErrorKind::ExpectedOneOf(current, vec![expected.to_string()]), span)
+            self.error(
+                ErrorKind::ExpectedOneOf(current, vec![expected.to_string()]),
+                span,
+            )
         }
     }
 
     // Consume any identifier (including parenthesized operators)
     fn expect_identifier(&mut self) -> Result<(String, Span), Error> {
-        match self.next_with_span()? {
-            (Token::LowerIdentifier(ident) | Token::UpperIdentifier(ident), span) => Ok((ident, span)),
-            (Token::LeftParen, _) => {
+        let (token, span) = self.next_with_span()?;
+        match token {
+            Token::LowerIdentifier(ident) | Token::UpperIdentifier(ident) => Ok((ident, span)),
+            Token::LeftParen => {
                 let (token, span) = self.next_with_span()?;
                 if let Token::Operator(oper) = token {
                     self.expect(Token::RightParen)?;
@@ -174,7 +189,17 @@ impl<'a> Parser<'a> {
                     self.error(expected_one_of!(token, "operator"), span)
                 }
             }
-            (other, span) => self.error(expected_one_of!(other, "identifier"), span),
+            other => self.error(expected_one_of!(other, "identifier"), span),
+        }
+    }
+
+    // Consume uppercase identifier
+    fn expect_upper_identifier(&mut self) -> Result<(String, Span), Error> {
+        let (token, span) = self.next_with_span()?;
+        if let Token::UpperIdentifier(ident) = token {
+            Ok((ident, span))
+        } else {
+            self.error(expected_one_of!(token, "uppercase identifier"), span)
         }
     }
 
@@ -190,10 +215,33 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    // Parse type constant or type variable
-    fn parse_base_type(&mut self) -> Result<Type, Error> {
-        let (token, span) = self.next_with_span()?;
+    // Based on the token, determines if it could be the start of a type atom
+    // Used by parse_type_app()
+    fn could_be_type_atom(token: &Token) -> bool {
         match token {
+            Token::LeftParen => true,
+            Token::KwUnit
+            | Token::KwBool
+            | Token::KwChar
+            | Token::KwStr
+            | Token::KwInt
+            | Token::KwFloat
+            | Token::UpperIdentifier(_)
+            | Token::LowerIdentifier(_) => true,
+            _ => false,
+        }
+    }
+
+    // Parse type atom
+    fn parse_type_atom(&mut self) -> Result<Type, Error> {
+        let (token, span) = self.next_with_span_keep_newlines()?;
+        match token {
+            Token::LeftParen => {
+                let res = self.parse_type()?;
+                self.expect(Token::RightParen)?;
+                Ok(res)
+            }
+
             Token::KwUnit => Ok(Type::unit()),
             Token::KwBool => Ok(Type::bool()),
             Token::KwChar => Ok(Type::char()),
@@ -201,16 +249,44 @@ impl<'a> Parser<'a> {
             Token::KwInt => Ok(Type::int()),
             Token::KwFloat => Ok(Type::float()),
 
-            Token::UpperIdentifier(type_name) => Ok(Type::Const(type_name)),
+            Token::UpperIdentifier(name) => Ok(Type::Const {
+                name: Name::Unqualified(name),
+                location: self.make_location(span),
+                definition_id: None,
+            }),
+
             Token::LowerIdentifier(type_var) => Ok(Type::Var(TypeVar(type_var))),
 
             other => self.error(expected_one_of!(other, "type", "type variable"), span),
         }
     }
 
+    fn parse_type_app_args(&mut self) -> Result<Vec<(Type, Span)>, Error> {
+        let mut result = Vec::new();
+
+        while Parser::could_be_type_atom(self.peek()) {
+            // Need to get span for possible arg expr before parse_atom() is called because
+            // it consumes the token, so we can't get the span afterwards.
+            let arg_span = self.span();
+            let arg = self.parse_type_atom()?;
+            result.push((arg, arg_span));
+        }
+
+        Ok(result)
+    }
+
+    fn parse_type_app(&mut self) -> Result<Type, Error> {
+        let result = self.parse_type_atom()?;
+        let args = self.parse_type_app_args()?;
+
+        Ok(args.into_iter().fold(result, |child, (arg, _)| {
+            Type::App(Box::new(child), Box::new(arg))
+        }))
+    }
+
     // Parse type
     fn parse_type(&mut self) -> Result<Type, Error> {
-        let base_type = self.parse_base_type()?;
+        let base_type = self.parse_type_app()?;
 
         match self.peek() {
             Token::SmallArrow => {
@@ -254,9 +330,14 @@ impl<'a> Parser<'a> {
         self.expect(Token::RightParen)?;
 
         self.expect(Token::Colon)?;
-        let prim_type = self.parse_base_type()?;
+        let prim_type = match self.parse_type_atom()? {
+            Type::Prim(prim) => prim,
+            _ => panic!("not primitive type for extern"),
+        };
 
-        // TODO: Assert prim_type is actually a primitive type
+        self.compiler_cache
+            .externs
+            .insert((fun_name.clone(), args.len()));
 
         Ok(Expr {
             kind: ExprKind::Extern {
@@ -312,7 +393,7 @@ impl<'a> Parser<'a> {
 
     fn parse_lam_expr(&mut self) -> Result<Expr, Error> {
         self.expect(Token::Backslash)?;
-        
+
         let mut params = Vec::new();
         loop {
             let (token, span) = self.next_with_span()?;
@@ -343,11 +424,11 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    // Based on the token, determines if it could be the start of an an atom
+    // Based on the token, determines if it could be the start of an atom
     // Used by parse_app()
     fn could_be_atom(token: &Token) -> bool {
         match token {
-              Token::LeftParen
+            Token::LeftParen
             | Token::UpperIdentifier(_)
             | Token::LowerIdentifier(_)
             | Token::LitBool(_)
@@ -356,17 +437,14 @@ impl<'a> Parser<'a> {
             | Token::LitString(_)
             | Token::LitChar(_)
             | Token::LitUnit => true,
-            _ => false
+            _ => false,
         }
     }
 
     // Parse expression atom (i.e. literal, variable, parenthesized expression)
-    // The error type contains a bool which is true if zero tokens were matched
-    // which is useful for parse_app() to know if it should go through and 
-    // report the error (if more than zero were matched) or ignore it (if zero
-    // were matched).
     fn parse_atom(&mut self) -> Result<Expr, Error> {
         let (token, span) = self.next_with_span()?;
+        let peeked = self.peek();
         match token {
             // Parse parenthesized expression
             Token::LeftParen => {
@@ -375,7 +453,25 @@ impl<'a> Parser<'a> {
                 Ok(expr)
             }
 
-            Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => {
+            // Parse type constructor
+            // TODO: Allow qualified name for type
+            Token::UpperIdentifier(ident) if *peeked == Token::ColonColon => {
+                self.next()?;
+                let (constr_name, _) = self.expect_upper_identifier()?;
+                Ok(Expr {
+                    kind: ExprKind::TypeConstr {
+                        type_name: Name::Unqualified(ident),
+                        constr_name,
+                        type_definition_id: None,
+                    },
+                    location: self.make_location(span),
+                })
+            }
+
+            // Parse qualified name variable
+            Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident)
+                if *peeked == Token::Dot =>
+            {
                 let mut parts = vec![ident.clone()];
 
                 loop {
@@ -387,20 +483,23 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                let name = if parts.len() == 1 {
-                    Name::Unqualified(parts.pop().unwrap())
-                } else {
-                    Name::Qualified(parts)
-                };
-
                 Ok(Expr {
                     kind: ExprKind::Var {
-                        name,
+                        name: Name::Qualified(parts),
                         definition_id: None,
                     },
                     location: self.make_location(span),
                 })
             }
+
+            // Parse unqualified name variable
+            Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => Ok(Expr {
+                kind: ExprKind::Var {
+                    name: Name::Unqualified(ident),
+                    definition_id: None,
+                },
+                location: self.make_location(span),
+            }),
 
             Token::LitBool(b) => Ok(Expr {
                 kind: ExprKind::Lit(Literal::Bool(b)),
@@ -432,30 +531,29 @@ impl<'a> Parser<'a> {
                 location: self.make_location(span),
             }),
 
-            other => Err(self.make_error(expected_one_of!(other.clone(), "identifier", "literal", "'('"), span)),
+            other => Err(self.make_error(
+                expected_one_of!(other.clone(), "identifier", "literal", "'('"),
+                span,
+            )),
         }
     }
 
     // Parse function application
     fn parse_app(&mut self) -> Result<Expr, Error> {
         let mut result = self.parse_atom()?;
-        
-        loop {
-            if Parser::could_be_atom(self.peek()) {
-                // Need to get span for possible arg expr before parse_atom() is called because
-                // it consumes the token, so we can't get the span afterwards.
-                let arg_span = self.span();
-                let arg = self.parse_atom()?;
-                result = Expr {
-                    kind: ExprKind::App {
-                        fun: Box::new(result),
-                        arg: Box::new(arg),
-                    },
-                    location: self.make_location(arg_span),
-                };
-            } else {
-                break;
-            }
+
+        while Parser::could_be_atom(self.peek()) {
+            // Need to get span for possible arg expr before parse_atom() is called because
+            // it consumes the token, so we can't get the span afterwards.
+            let arg_span = self.span();
+            let arg = self.parse_atom()?;
+            result = Expr {
+                kind: ExprKind::App {
+                    fun: Box::new(result),
+                    arg: Box::new(arg),
+                },
+                location: self.make_location(arg_span),
+            };
         }
 
         Ok(result)
@@ -510,7 +608,9 @@ impl<'a> Parser<'a> {
                 // Advance if token is an operator
                 let (_, span) = self.next_with_span()?;
 
-                if let Some(Precedence::Prefix(right_prec)) = self.compiler_cache.operator_precedences.get(&oper) {
+                if let Some(Precedence::Prefix(right_prec)) =
+                    self.compiler_cache.operator_precedences.get(&oper)
+                {
                     let expr = self.parse_oper_expr(*right_prec)?;
                     Parser::unary_oper(oper.clone(), self.make_location(self.span()), expr)
                 } else {
@@ -528,10 +628,10 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
 
-            let prec = self.compiler_cache
-                .operator_precedences
-                .get(&oper)
-                .ok_or(self.make_error(ErrorKind::UndeclaredOperator(oper.clone()), self.span()))?;
+            let prec =
+                self.compiler_cache.operator_precedences.get(&oper).ok_or(
+                    self.make_error(ErrorKind::UndeclaredOperator(oper.clone()), self.span()),
+                )?;
 
             if let Precedence::Postfix(left_prec) = *prec {
                 if left_prec < min_prec {
@@ -550,7 +650,7 @@ impl<'a> Parser<'a> {
                 let (_, span) = self.next_with_span()?;
 
                 let rhs = self.parse_oper_expr(right_prec)?;
-                lhs = Parser::binary_oper(oper, self.make_location(span), lhs, rhs,);
+                lhs = Parser::binary_oper(oper, self.make_location(span), lhs, rhs);
                 continue;
             }
 
@@ -591,8 +691,15 @@ impl<'a> Parser<'a> {
                 Token::UpperIdentifier(param) | Token::LowerIdentifier(param) => {
                     params.push((param, span))
                 }
-                Token::Equal => break,
-                other => return self.error(expected_one_of!(other, "identifier", "'='"), span),
+                Token::Equal => {
+                    // Ensure at least one parameter was parsed
+                    if params.len() > 0 {
+                        break;
+                    } else {
+                        return self.error(expected_one_of!(token, "parameter"), span);
+                    }
+                }
+                other => return self.error(expected_one_of!(other, "parameter", "'='"), span),
             }
         }
 
@@ -660,6 +767,62 @@ impl<'a> Parser<'a> {
         })
     }
 
+    // Parse type constructor for type definition
+    fn parse_type_constructor(&mut self) -> Result<TypeConstructor, Error> {
+        let (name, _) = self.expect_upper_identifier()?;
+        let params = self
+            .parse_type_app_args()?
+            .into_iter()
+            .map(|(t, _)| t)
+            .collect();
+
+        Ok(TypeConstructor { name, params })
+    }
+
+    // Parse toplevel type definition
+    fn parse_type_def(&mut self) -> Result<Toplevel, Error> {
+        self.expect(Token::KwType)?;
+        let (name, span) = self.expect_upper_identifier()?;
+
+        // Parse type variables
+        let mut type_vars = BTreeSet::new();
+        loop {
+            let (token, span) = self.next_with_span()?;
+            match token {
+                Token::Equal => break,
+                Token::LowerIdentifier(ident) => {
+                    let type_var = TypeVar(ident); // This clone can probably be avoided
+                    if type_vars.contains(&type_var) {
+                        return self.error(ErrorKind::DuplicateTypeVariable(type_var), span);
+                    } else {
+                        type_vars.insert(type_var);
+                    }
+                }
+                _ => return self.error(expected_one_of!(token, "type variable", "'='"), span),
+            }
+        }
+
+        let mut constructors = Vec::new();
+        loop {
+            constructors.push(self.parse_type_constructor()?);
+            if let Token::Bar = self.peek() {
+                self.next()?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(Toplevel {
+            kind: ToplevelKind::Type {
+                type_vars,
+                constructors,
+            },
+            name,
+            location: self.make_location(span),
+            definition_id: None,
+        })
+    }
+
     fn parse_import(&mut self) -> Result<Import, Error> {
         let span = self.expect(Token::KwImport)?;
 
@@ -694,7 +857,12 @@ impl<'a> Parser<'a> {
         Ok(export)
     }
 
-    pub fn parse_module(&mut self, tokens: Vec<(Token, Span)>, module_path: Vec<String>, filepath: PathBuf) -> Result<(), Error> {
+    pub fn parse_module(
+        &mut self,
+        tokens: Vec<(Token, Span)>,
+        module_path: Vec<String>,
+        filepath: PathBuf,
+    ) -> Result<(), Error> {
         self.tokens = VecDeque::from(tokens);
         self.line_start = 0;
         self.filepath = filepath;
@@ -712,6 +880,7 @@ impl<'a> Parser<'a> {
                     Token::KwExport => exports.push(self.parse_export()?),
                     Token::KwFn => toplevels.push(self.parse_fn_def()?),
                     Token::KwLet => toplevels.push(self.parse_let_def()?),
+                    Token::KwType => toplevels.push(self.parse_type_def()?),
 
                     _ => {
                         let (token, span) = self.next_with_span()?;
@@ -733,7 +902,7 @@ impl<'a> Parser<'a> {
             toplevels,
             module_id: None,
         });
-        
+
         Ok(())
     }
 }
@@ -764,23 +933,28 @@ fn get_module_path(root: &Path, file: &Path) -> Vec<String> {
     }
 }
 
-pub fn parse_program(compiler_cache: &mut CompilerCache, files: Vec<DirEntry>, root: &Path) -> Result<(), Error> {
+pub fn parse_program(
+    compiler_cache: &mut CompilerCache,
+    files: Vec<DirEntry>,
+    root: &Path,
+) -> Result<(), Error> {
     let mut lexer_output = Vec::new();
     for file in files {
         let path = file.path();
-        let source = read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
+        let source =
+            read_to_string(path).expect(format!("Failed to read file {:?}", path).as_str());
 
-        let tokens = tokenize(&source, path.to_path_buf(), &mut compiler_cache.operator_precedences)?;
+        let tokens = tokenize(
+            &source,
+            path.to_path_buf(),
+            &mut compiler_cache.operator_precedences,
+        )?;
         lexer_output.push((tokens, path.to_path_buf()));
     }
 
     let mut parser = Parser::new(compiler_cache);
     for (tokens, path) in lexer_output {
-        parser.parse_module(
-            tokens,
-            get_module_path(root, path.as_path()),
-            path,
-        )?;
+        parser.parse_module(tokens, get_module_path(root, path.as_path()), path)?;
     }
 
     Ok(())

@@ -1,4 +1,4 @@
-import string
+import stl.string
 
 export print_str
 export println_str

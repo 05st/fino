@@ -1,8 +1,13 @@
 use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
 use logos::{skip, Filter, Lexer, Logos};
+use unescape::unescape;
 
-use crate::{error::{Error, ErrorKind}, location::{Location, Span}, parser::Precedence};
+use crate::{
+    error::{Error, ErrorKind},
+    location::{Location, Span},
+    parser::Precedence,
+};
 
 pub struct LexerState<'a> {
     operator_map: &'a mut HashMap<String, Precedence>,
@@ -54,7 +59,7 @@ pub enum Token {
     #[token("float")]
     KwFloat,
 
-    #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| lex.slice().trim_matches('"').to_owned())]
+    #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| unescape(&lex.slice().trim_matches('"').to_owned()))]
     LitString(String),
     #[regex(r"-?[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
     LitInteger(i64),
@@ -63,9 +68,7 @@ pub enum Token {
     #[token("true", |_| true)]
     #[token("false", |_| false)]
     LitBool(bool),
-    // TODO:
-    // Properly parse escape sequences
-    #[regex(r"'.'", |lex| lex.slice().chars().nth(1).to_owned())]
+    #[regex(r#"'([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})'"#, |lex| unescape(&lex.slice().trim_matches('\'').to_owned()).unwrap().chars().nth(0))]
     LitChar(char),
     #[token("()")]
     LitUnit,
@@ -84,6 +87,8 @@ pub enum Token {
     Bar,
     #[token(":")]
     Colon,
+    #[token("::")]
+    ColonColon,
     #[token("\\")]
     Backslash,
     #[token("->")]
@@ -100,7 +105,10 @@ pub enum Token {
 
     // Regex for operator identifier should be the same as the one for the Operator
     // token
-    #[regex(r"(infl|infr|pref|post)\s+[\+\-*\/^!|<>=?$@#%:&.]+\s+[0-9]+\n", fixity_decl_callback)]
+    #[regex(
+        r"(infl|infr|pref|post)\s+[\+\-*\/^!|<>=?$@#%:&.]+\s+[0-9]+\n",
+        fixity_decl_callback
+    )]
     FixityDecl,
 
     // Priority is set lower for these three because the patterns can also match
@@ -130,8 +138,13 @@ pub enum Token {
 }
 
 fn fixity_decl_callback(lexer: &mut Lexer<Token>) -> Filter<()> {
-    let parts = lexer.slice().split_ascii_whitespace().collect::<Vec<&str>>();
-    let prec = parts[2].parse::<u8>().expect("Failed to parse operator precedence");
+    let parts = lexer
+        .slice()
+        .split_ascii_whitespace()
+        .collect::<Vec<&str>>();
+    let prec = parts[2]
+        .parse::<u8>()
+        .expect("Failed to parse operator precedence");
 
     // Left associative operators need higher right precedence,
     // right associative operators need higher left precedence
@@ -144,25 +157,32 @@ fn fixity_decl_callback(lexer: &mut Lexer<Token>) -> Filter<()> {
         other => panic!("Bad fixity {:?}", other),
     };
 
-    lexer.extras.operator_map.insert(String::from(parts[1]), entry);
+    lexer
+        .extras
+        .operator_map
+        .insert(String::from(parts[1]), entry);
 
     Filter::Skip
 }
 
-pub fn tokenize(source: &String, filepath: PathBuf, operator_map: &mut HashMap<String, Precedence>) -> Result<Vec<(Token, Span)>, Error> {
+pub fn tokenize(
+    source: &String,
+    filepath: PathBuf,
+    operator_map: &mut HashMap<String, Precedence>,
+) -> Result<Vec<(Token, Span)>, Error> {
     let mut tokens = Vec::new();
 
-    let lexer = Token::lexer_with_extras(source, LexerState {
-        operator_map,
-    }).spanned();
-    
+    let lexer = Token::lexer_with_extras(source, LexerState { operator_map }).spanned();
+
     for lex in lexer {
         match lex {
             (Ok(token), span) => tokens.push((token, span)),
-            (Err(_), span) => return Err(
-                // Translate lexer error
-                Error::new(ErrorKind::UnknownToken, Location::new(filepath, span))
-            ),
+            (Err(_), span) => {
+                return Err(
+                    // Translate lexer error
+                    Error::new(ErrorKind::UnknownToken, Location::new(filepath, span)),
+                )
+            }
         }
     }
 
@@ -203,6 +223,7 @@ impl Display for Token {
             Token::Equal => write!(f, "'='"),
             Token::Bar => write!(f, "'|'"),
             Token::Colon => write!(f, "':'"),
+            Token::ColonColon => write!(f, "'::'"),
             Token::Backslash => write!(f, "'\\'"),
             Token::SmallArrow => write!(f, "'->'"),
             Token::BigArrow => write!(f, "'=>'"),

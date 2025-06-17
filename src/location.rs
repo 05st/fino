@@ -2,7 +2,7 @@ use std::{ops::Range, path::PathBuf};
 
 pub type Span = Range<usize>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Location {
     pub path: PathBuf,
     pub span: Span,

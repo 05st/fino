@@ -41,7 +41,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 self.enter_fn_block(fn_value);
 
                 // Load environment
-                let env_struct = self.ptr_struct(env.len());
+                let env_struct = self.ptr_struct_type(env.len());
                 for (i, var_name) in env.iter().enumerate() {
                     // let var_ptr = self.builder.build_alloca(self.ptr_type(), var_name.as_str()).unwrap();
 

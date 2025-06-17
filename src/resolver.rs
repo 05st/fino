@@ -1,10 +1,10 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use crate::{
     ast::*,
-    cache::{CompilerCache, Definition, DefinitionId, ModuleId},
+    cache::{CompilerCache, Definition, DefinitionId, DefinitionKind, ModuleId},
     error::{Error, ErrorKind},
-    location::Location
+    location::Location, types::Type
 };
 
 struct NameResolver<'a> {
@@ -13,6 +13,7 @@ struct NameResolver<'a> {
     definition_count: usize,
     environment: Environment,
     module_path: Option<Vec<String>>,
+    type_constrs: HashMap<DefinitionId, HashSet<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -68,7 +69,7 @@ impl Environment {
     fn lookup_qualified_name(&self, name: &Vec<String>, location: &Location) -> Result<DefinitionId, Error> {
         match self.toplevels.get(name) {
             Some(definition_id) => Ok(definition_id.clone()),
-            None => Err(Error::new(ErrorKind::UnknownVariable(name.clone()), location.clone())),
+            None => Err(Error::new(ErrorKind::Undefined(name.clone()), location.clone())),
         }
     }
 
@@ -95,25 +96,33 @@ impl Environment {
             Err(Error::new(ErrorKind::MultipleDefinitions(name.clone()), location.clone()))
         } else if num_candidates == 0 {
             // If there are no possible definitions, throw an error
-            Err(Error::new(ErrorKind::UnknownVariable(vec![name.clone()]), location.clone()))
+            Err(Error::new(ErrorKind::Undefined(vec![name.clone()]), location.clone()))
         } else {
             Ok(candidates.first().unwrap().1.clone())
+        }
+    }
+
+    fn lookup_name(&self, name: &Name, location: &Location) -> Result<DefinitionId, Error> {
+        match name {
+            Name::Unqualified(ident) => self.lookup_unqualified_name(ident, location),
+            Name::Qualified(qual) => self.lookup_qualified_name(qual, location),
         }
     }
 }
 
 impl<'a> NameResolver<'a> {
-    fn new(compiler_cache: &mut CompilerCache) -> NameResolver {
+    fn new(compiler_cache: &'a mut CompilerCache) -> NameResolver {
         NameResolver {
             compiler_cache,
             module_exports: HashMap::new(),
             definition_count: 0,
             environment: Environment::new(),
             module_path: None,
+            type_constrs: HashMap::new(),
         }
     }
 
-    fn new_definition(&mut self, name: String, location: Location, local: bool) -> DefinitionId {
+    fn new_definition(&mut self, name: String, kind: DefinitionKind, location: Location, local: bool) -> DefinitionId {
         let mut mangled_name = self.module_path.clone().unwrap();
         mangled_name.push(name);
 
@@ -128,6 +137,7 @@ impl<'a> NameResolver<'a> {
         self.definition_count += 1;
 
         self.compiler_cache.definitions.push(Definition {
+            kind,
             location,
             mangled_name,
             local,
@@ -136,16 +146,63 @@ impl<'a> NameResolver<'a> {
         definition_id
     }
 
+    fn assert_definition_kind(&self, definition_id: DefinitionId, kind: DefinitionKind) -> Result<DefinitionId, Error> {
+        if self.compiler_cache[&definition_id].kind != kind {
+            panic!("bad definition kind")
+        } else {
+            Ok(definition_id)
+        }
+    }
+
+    fn resolve_type(&mut self, ty: &mut Type) -> Result<(), Error> {
+        match ty {
+            Type::Var(_) => Ok(()),
+            Type::UniVar(_) => Ok(()),
+            Type::Prim(_) => Ok(()),
+
+            Type::Const { name, location, definition_id } => {
+                *definition_id = Some(self.assert_definition_kind(
+                    self.environment.lookup_name(name, location)?,
+                    DefinitionKind::Type
+                )?);
+                Ok(())
+            }
+
+            Type::App(base, arg) => {
+                self.resolve_type(base)?;
+                self.resolve_type(arg)
+            }
+
+            Type::Fun(param, ret) => {
+                self.resolve_type(param)?;
+                self.resolve_type(ret)
+            }
+        }
+    }
+
     fn resolve_expr(&mut self, expr: &mut Expr) -> Result<(), Error> {
         match &mut expr.kind {
             ExprKind::Lit(_) => Ok(()),
 
             ExprKind::Var { name, definition_id } => {
-                *definition_id = Some(match name {
-                    Name::Unqualified(ident) => self.environment.lookup_unqualified_name(ident, &expr.location)?,
-                    Name::Qualified(qual) => self.environment.lookup_qualified_name(qual, &expr.location)?,
-                });
+                *definition_id = Some(self.assert_definition_kind(
+                    self.environment.lookup_name(name, &expr.location)?,
+                    DefinitionKind::Let
+                )?);
+                Ok(())
+            }
 
+            ExprKind::TypeConstr { type_name, constr_name, type_definition_id } => {
+                let definition_id = self.assert_definition_kind(
+                    self.environment.lookup_name(type_name, &expr.location)?,
+                    DefinitionKind::Type
+                )?;
+
+                if !self.type_constrs[&definition_id].contains(constr_name) {
+                    panic!("nonexistent type constructor")
+                }
+
+                *type_definition_id = Some(definition_id);
                 Ok(())
             }
 
@@ -162,7 +219,7 @@ impl<'a> NameResolver<'a> {
             }
 
             ExprKind::Lam { param_name, ref mut body, param_definition_id } => {
-                let new_definition_id = self.new_definition(param_name.clone(), expr.location.clone(), true);
+                let new_definition_id = self.new_definition(param_name.clone(), DefinitionKind::Let, expr.location.clone(), true);
                 *param_definition_id = Some(new_definition_id.clone());
 
                 self.environment.push_scope(param_name.clone(), new_definition_id);
@@ -175,7 +232,7 @@ impl<'a> NameResolver<'a> {
             ExprKind::Let { name, ref mut aexpr, ref mut body, definition_id } => {
                 self.resolve_expr(aexpr)?;
 
-                let new_definition_id = self.new_definition(name.clone(), expr.location.clone(), true);
+                let new_definition_id = self.new_definition(name.clone(), DefinitionKind::Let, expr.location.clone(), true);
                 *definition_id = Some(new_definition_id.clone());
 
                 self.environment.push_scope(name.clone(), new_definition_id);
@@ -233,8 +290,26 @@ impl<'a> NameResolver<'a> {
 
         // Set up definitions for toplevels
         for toplevel in module.toplevels.iter_mut() {
-            let definition_id = self.new_definition(toplevel.name.clone(), toplevel.location.clone(), false);
+            let definition_kind = match toplevel.kind {
+                ToplevelKind::Let { .. } => DefinitionKind::Let,
+                ToplevelKind::Type { .. } => DefinitionKind::Type,
+            };
+
+            let definition_id = self.new_definition(toplevel.name.clone(), definition_kind, toplevel.location.clone(), false);
             toplevel.definition_id = Some(definition_id.clone());
+
+            // Set up type constructor if it's a type definition
+            if let ToplevelKind::Type { type_vars: _, constructors } = &toplevel.kind {
+                let mut constr_set = HashSet::new();
+                for constr in constructors {
+                    if constr_set.contains(&constr.name) {
+                        panic!("duplicate type constructor");
+                    } else {
+                        constr_set.insert(constr.name.clone());
+                    }
+                }
+                self.type_constrs.insert(definition_id.clone(), constr_set);
+            }
 
             self.environment.insert_toplevel(
                 &module.module_path,
@@ -258,6 +333,7 @@ impl<'a> NameResolver<'a> {
                 }
             }
         }
+
         for export in module.exports.iter_mut() {
             match export {
                 Export::Toplevel { name, location, ref mut definition_id } => {
@@ -276,10 +352,18 @@ impl<'a> NameResolver<'a> {
         self.process_module_imports(module);
         for toplevel in module.toplevels.iter_mut() {
             match &mut toplevel.kind {
-                ToplevelKind::Let { type_scheme: _, ref mut expr, is_main: _ } => {
+                ToplevelKind::Let { type_scheme, ref mut expr, is_main: _ } => {
+                    self.resolve_type(&mut type_scheme.1)?;
                     self.resolve_expr(expr)?;
                 }
-                ToplevelKind::Type {  } => todo!(),
+
+                ToplevelKind::Type { type_vars: _, constructors } => {
+                    for constructor in constructors {
+                        for mut ty in &mut constructor.params {
+                            self.resolve_type(&mut ty)?;
+                        }
+                    }
+                }
             }
         }
 

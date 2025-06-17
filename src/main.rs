@@ -64,7 +64,7 @@ fn run_compiler(files: Vec<DirEntry>, root: &Path, out: &Path) -> Result<(), Err
     typecheck_program(&mut compiler_cache)?;
 
     let mir = transform_program(&mut compiler_cache);
-    compile_llvm(mir, out);
+    compile_llvm(&mut compiler_cache, mir, out);
 
     Ok(())
 }

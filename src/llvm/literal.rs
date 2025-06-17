@@ -1,5 +1,4 @@
 use inkwell::values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum};
-use unescape::unescape;
 
 use crate::literal::Literal;
 
@@ -27,9 +26,8 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
             }
 
             Literal::String(s) => {
-                let unescaped = unescape(s).expect("Failed to unescape string literal");
-                let len_value = self.context.i64_type().const_int(unescaped.len() as u64, false);
-                let string_ptr = self.get_string_literal(unescaped).as_pointer_value();
+                let len_value = self.context.i64_type().const_int(s.len() as u64, false);
+                let string_ptr = self.get_string_literal(s).as_pointer_value();
                 self.build_new_literal_call("_fino_string_new", &[string_ptr.into(), len_value.into()])
             }
 

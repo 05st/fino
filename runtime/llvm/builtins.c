@@ -87,7 +87,14 @@ void* _fino_string_print(_fino_string* str) {
     printf("%s", str->buffer);
     return NULL;
 }
-void* _fino_string_concat(_fino_string* a, _fino_string* b) {
+
+_fino_string* _fino_string_append(_fino_string* s, _fino_char* c) {
+    char* res_buf = GC_malloc(s->length + 2);
+    strcpy(res_buf, s->buffer);
+    res_buf[s->length] = c->value;
+    return _fino_string_new(res_buf, s->length + 1);
+}
+_fino_string* _fino_string_concat(_fino_string* a, _fino_string* b) {
     int64_t res_len = a->length + b->length;
     char* res_buf = GC_malloc(res_len + 1); // Add one for null character
     strcpy(res_buf, a->buffer);

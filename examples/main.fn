@@ -1,4 +1,11 @@
 import mandelbrot
 import factorial
+import stl.prelude
 
-let main : unit = mandelbrot
+// type List a = Nil | Cons a (List a)
+
+// fn map : (a -> b) -> (List a) -> (List b)
+//     f l = List::Nil
+
+let main : unit = mandelbrot >> println_str "What is your name?" >> println_str ("Hello, " ++ readline ++ "!")
+// let main : unit = println_int (factorial 7)

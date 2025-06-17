@@ -2,12 +2,14 @@ use std::{collections::{BTreeSet, HashMap}, fmt::Display};
 
 use ena::unify::{EqUnifyValue, UnifyKey};
 
+use crate::{ast::Name, cache::DefinitionId, location::Location};
+
 // It is important to note the distinction made between type variables and
 // unification variables. A type variable is rigid, they are universally
 // quantified, and they should not be present anywhere during unification. They
 // are only introduced through type annotations as of now. When generalized
 // types (type schemes) are instantiated, any occurence of a type variable will
-// be replaced by fresh unification variables. A unification variable is
+// be replaced by a fresh unification variable. A unification variable is
 // flexible, they are placeholders for a rigid, concrete type. This could be a
 // type constant, function type, or a type variable as well.
 
@@ -17,6 +19,9 @@ pub struct TypeVar(pub String);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
 pub struct TypeUniVar(u32);
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct TypePrim(pub String);
+
 #[derive(Clone, Debug)]
 pub struct TypeScheme(pub BTreeSet<TypeVar>, pub Type);
 
@@ -24,8 +29,14 @@ pub struct TypeScheme(pub BTreeSet<TypeVar>, pub Type);
 pub enum Type {
     Var(TypeVar),
     UniVar(TypeUniVar),
-    Const(String), // Type constant
-    Fun(Box<Self>, Box<Self>),
+    Prim(TypePrim), // Primitive type
+    Const { // Type constant
+        name: Name,
+        location: Location,
+        definition_id: Option<DefinitionId>
+    },
+    App(Box<Type>, Box<Type>),
+    Fun(Box<Type>, Box<Type>),
 }
 
 impl EqUnifyValue for Type {}
@@ -47,25 +58,25 @@ impl UnifyKey for TypeUniVar {
 }
 
 // Macro for generating base type constructors
-macro_rules! base_types {
+macro_rules! prim_types {
     ( $( $t:ident ),+ ) => {
         $(
             pub fn $t() -> Type {
-                Type::Const(String::from(stringify!($t)))
+                Type::Prim(TypePrim(String::from(stringify!($t))))
             }
         )+
     };
 }
 
 impl Type {
-    // Insert base type constructors
-    base_types!(unit, bool, char, str, int, float);
+    // Insert primitive type constructors
+    prim_types!(unit, bool, char, str, int, float);
 
     // Checks if self contains uvar, since unifying them would result in attempting
     // to construct an infinite type.
     pub fn occurs_check(&self, uvar: TypeUniVar) -> Result<(), Type> {
         match self {
-            Type::Var(_) | Type::Const(_) => Ok(()),
+            Type::Var(_) | Type::Prim(_) | Type::Const { .. } => Ok(()),
 
             Type::UniVar(uvar_self) => {
                 if *uvar_self == uvar {
@@ -73,6 +84,11 @@ impl Type {
                 } else {
                     Ok(())
                 }
+            }
+
+            Type::App(base, arg) => {
+                base.occurs_check(uvar).map_err(|_| self.clone())?;
+                arg.occurs_check(uvar).map_err(|_| self.clone())
             }
 
             Type::Fun(param, ret) => {
@@ -89,8 +105,16 @@ impl Type {
             Type::Var(tvar) => {
                 set.insert(tvar.clone());
             }
+
             Type::UniVar(_) => (),
-            Type::Const(_) => (),
+            Type::Prim(_) => (),
+            Type::Const { .. } => (),
+
+            Type::App(base, arg) => {
+                base.extract_type_vars(set);
+                arg.extract_type_vars(set);
+            }
+
             Type::Fun(arg, ret) => {
                 arg.extract_type_vars(set);
                 ret.extract_type_vars(set);
@@ -100,12 +124,17 @@ impl Type {
 
     pub fn substitute(&self, subst: &HashMap<Type, Type>) -> Type {
         match self {
-            Type::Var(_) | Type::UniVar(_) | Type::Const(_) => {
+            Type::Var(_) | Type::UniVar(_) | Type::Prim(_) | Type::Const { .. } => {
                 match subst.get(&self) {
                     None => self.clone(),
                     Some(new) => new.clone(),
                 }
             }
+
+            Type::App(base, arg) => {
+                Type::App(Box::new(base.substitute(subst)), Box::new(arg.substitute(subst)))
+            }
+
             Type::Fun(arg, ret) => {
                 Type::Fun(Box::new(arg.substitute(subst)), Box::new(ret.substitute(subst)))
             }
@@ -118,7 +147,9 @@ impl Display for Type {
         match self {
             Type::Var(type_var) => write!(f, "{}", type_var),
             Type::UniVar(uni_var) => write!(f, "{}", uni_var),
-            Type::Const(name) => write!(f, "{}", name),
+            Type::Prim(prim) => write!(f, "{}", prim),
+            Type::Const { name, location: _, definition_id: _ }  => write!(f, "{}", name.get_unqualified_part()),
+            Type::App(base, arg) => write!(f, "{} {}", base, arg),
             Type::Fun(arg, ret) => write!(f, "{} -> {}", arg, ret),
         }
     }
@@ -133,5 +164,11 @@ impl Display for TypeVar {
 impl Display for TypeUniVar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "${}", self.0)
+    }
+}
+
+impl Display for TypePrim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

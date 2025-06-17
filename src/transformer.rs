@@ -10,7 +10,7 @@ struct Transformer<'a> {
 }
 
 impl<'a> Transformer<'a> {
-    fn new(compiler_cache: &mut CompilerCache) -> Transformer {
+    fn new(compiler_cache: &'a mut CompilerCache) -> Transformer {
         Transformer {
             compiler_cache,
             globals: Vec::new(),
@@ -41,6 +41,9 @@ impl<'a> Transformer<'a> {
                     free_vars.push(self.get_mangled_name(definition_id));
                 }
             }
+
+            // Type constructor shouldn't refer to any free variables
+            ast::ExprKind::TypeConstr { .. } => (),
 
             ast::ExprKind::App { fun, arg } => {
                 self.collect_free_vars(fun, scope.clone(), free_vars);
@@ -89,6 +92,13 @@ impl<'a> Transformer<'a> {
                 } else {
                     mir::Expr::Var(mangled_name)
                 }
+            }
+
+            ast::ExprKind::TypeConstr { type_name: _, constr_name, type_definition_id } => {
+                let type_definition_id = type_definition_id.as_ref().unwrap();
+                let full_mangled_name = self.get_mangled_name(type_definition_id) + "_" + constr_name;
+
+                mir::Expr::Closure { fun_name: full_mangled_name, env: Vec::new() }
             }
 
             ast::ExprKind::Extern { fun_name, args, prim_type: _ } => {
@@ -157,7 +167,10 @@ impl<'a> Transformer<'a> {
                     }
                 }
 
-                ast::ToplevelKind::Type {  } => todo!(),
+                ast::ToplevelKind::Type { type_vars: _, constructors } => {
+
+                    todo!()
+                }
             }
         }
 
@@ -192,7 +205,7 @@ impl<'a> Transformer<'a> {
                     self.globals.push(global);
                 }
 
-                ast::ToplevelKind::Type {  } => todo!(),
+                ast::ToplevelKind::Type { type_vars, constructors } => todo!(),
             }
         }
     }

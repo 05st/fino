@@ -1,18 +1,20 @@
 use std::{collections::{HashMap, HashSet}, path::Path};
 
 use inkwell::{
-    basic_block::BasicBlock, builder::Builder, context::Context, module::Module, types::{PointerType, StructType}, values::{
+    basic_block::BasicBlock, builder::Builder, context::Context, module::Module, types::{FunctionType, PointerType, StructType}, values::{
         FunctionValue, GlobalValue, PointerValue
     }, AddressSpace
 };
 
-use crate::mir;
+use crate::{cache::CompilerCache, mir};
 
 mod expr;
 mod toplevel;
 mod literal;
 
 struct LLVMCodegen<'a, 'ctx> {
+    compiler_cache: &'a mut CompilerCache,
+
     context: &'ctx Context,
     builder: &'a Builder<'ctx>,
     module: &'a Module<'ctx>,
@@ -28,8 +30,9 @@ struct LLVMCodegen<'a, 'ctx> {
 }
 
 impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
-    fn new(context: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx>) -> LLVMCodegen<'a, 'ctx> {
+    fn new(compiler_cache: &'a mut CompilerCache, context: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx>) -> LLVMCodegen<'a, 'ctx> {
         LLVMCodegen {
+            compiler_cache,
             context,
             builder,
             module,
@@ -74,8 +77,12 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         self.context.ptr_type(AddressSpace::default())
     }
 
-    fn ptr_struct(&self, size: usize) -> StructType<'ctx> {
+    fn ptr_struct_type(&self, size: usize) -> StructType<'ctx> {
         self.context.struct_type(&[self.ptr_type().into()].repeat(size), false)
+    }
+
+    fn ptr_fn_type(&self, arity: usize) -> FunctionType<'ctx> {
+        self.ptr_type().fn_type(&[self.ptr_type().into()].repeat(arity), false)
     }
 
     fn add_variable(&mut self, name: String, value: PointerValue<'ctx>) {
@@ -94,6 +101,11 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
     }
 
     fn declare_runtime(&self) {
+        // Declare all externed functions
+        for (name, arity) in &self.compiler_cache.externs {
+            self.module.add_function(name.as_str(), self.ptr_fn_type(*arity), None);
+        }
+
         // Utility functions to help define builtin functions
         let declare_wrapper_fns = |prefix, param_types: Vec<_>| {
             self.module.add_function(
@@ -101,11 +113,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 self.ptr_type().fn_type(param_types.as_slice(), false),
                 None,
             );
-            self.module.add_function(
-                format!("{}_print", prefix).as_str(),
-                self.ptr_type().fn_type(&[self.ptr_type().into()], false),
-                None,
-            );
+            self.module.add_function(format!("{}_print", prefix).as_str(), self.ptr_fn_type(1), None);
         };
 
         declare_wrapper_fns("_fino_bool", vec![self.context.bool_type().into()]);
@@ -114,46 +122,10 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         declare_wrapper_fns("_fino_float", vec![self.context.f64_type().into()]);
         declare_wrapper_fns("_fino_string", vec![self.ptr_type().into(), self.context.i64_type().into()]);
 
-        let binary_oper_fns = vec![
-            "_fino_int_add",
-            "_fino_int_sub",
-            "_fino_int_mul",
-            "_fino_int_div",
-            "_fino_int_grt",
-            "_fino_int_lst",
-            "_fino_int_geq",
-            "_fino_int_leq",
-            "_fino_float_add",
-            "_fino_float_sub",
-            "_fino_float_mul",
-            "_fino_float_div",
-            "_fino_float_grt",
-            "_fino_float_lst",
-            "_fino_float_geq",
-            "_fino_float_leq",
-            "_fino_bool_and",
-            "_fino_bool_or",
-            "_fino_string_concat"
-        ];
-
-        for fn_name in binary_oper_fns {
-            self.module.add_function(
-                fn_name,
-                self.ptr_type().fn_type(&[self.ptr_type().into()].repeat(2), false),
-                None,
-            );
-        }
-
         // Special get function for unboxing bools, for use by conditional branching
         self.module.add_function(
             "_fino_bool_get",
             self.context.bool_type().fn_type(&[self.ptr_type().into()], false),
-            None,
-        );
-
-        self.module.add_function(
-            "_fino_readline",
-            self.ptr_type().fn_type(&[], false),
             None,
         );
 
@@ -191,12 +163,12 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
     }
 }
 
-pub fn compile_llvm(mir: Vec<mir::Toplevel>, path: &Path) {
+pub fn compile_llvm(compiler_cache: &mut CompilerCache, mir: Vec<mir::Toplevel>, path: &Path) {
     let context = Context::create();
     let builder = context.create_builder();
     let module = context.create_module("fino_llvm");
 
-    let mut codegen = LLVMCodegen::new(&context, &builder, &module);
+    let mut codegen = LLVMCodegen::new(compiler_cache, &context, &builder, &module);
 
     codegen.declare_runtime();
 

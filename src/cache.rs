@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::{ast::Module, location::Location, parser::Precedence};
 
@@ -12,10 +12,19 @@ pub struct CompilerCache {
     pub operator_precedences: HashMap<String, Precedence>,
     // Maps module path to module id
     pub module_ids: HashMap<Vec<String>, ModuleId>,
+    // Set of all extern expressions' (name, arity)
+    pub externs: HashSet<(String, usize)>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum DefinitionKind {
+    Let,
+    Type,
 }
 
 #[derive(Debug)]
 pub struct Definition {
+    pub kind: DefinitionKind,
     pub location: Location,
     pub mangled_name: Vec<String>,
     pub local: bool,

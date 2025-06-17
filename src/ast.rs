@@ -1,22 +1,38 @@
+use std::collections::BTreeSet;
+
 use crate::{cache::{DefinitionId, ModuleId}, literal::Literal, location::Location, types::*};
 
 // A qualified name contains the entire path to the name. For example,
 // 'abc::xyz::func' is a qualified name. An unqualified name would just be
 // 'func'.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Name {
     Unqualified(String),
     Qualified(Vec<String>),
 }
 
+impl Name {
+    pub fn get_unqualified_part(&self) -> String {
+        match self {
+            Name::Unqualified(part) => part.clone(),
+            Name::Qualified(parts) => parts.last().unwrap().clone(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ExprKind {
     Lit(Literal),
+    // A variable / type constant name can be a qualified or unqualified name. A variable written as a
+    // qualified names can only refer to a toplevel definition.
     Var {
-        // A variable can be a qualified or unqualified name. A variable written as a
-        // qualified names can only refer to a toplevel definition.
         name: Name,
         definition_id: Option<DefinitionId>,
+    },
+    TypeConstr {
+        type_name: Name,
+        constr_name: String,
+        type_definition_id: Option<DefinitionId>,
     },
     App {
         fun: Box<Expr>,
@@ -25,8 +41,7 @@ pub enum ExprKind {
     Extern {
         fun_name: String,
         args: Vec<Expr>,
-        // Extern calls can only have a primitive type result
-        prim_type: Type,
+        prim_type: TypePrim,
     },
     Lam {
         param_name: String,
@@ -53,6 +68,12 @@ pub struct Expr {
 }
 
 #[derive(Debug)]
+pub struct TypeConstructor {
+    pub name: String,
+    pub params: Vec<Type>,
+}
+
+#[derive(Debug)]
 pub enum ToplevelKind {
     // Fn definitions are desugared into curried lambda expressions by the parser.
     Let {
@@ -60,7 +81,10 @@ pub enum ToplevelKind {
         expr: Expr,
         is_main: bool,
     },
-    Type { },
+    Type {
+        type_vars: BTreeSet<TypeVar>,
+        constructors: Vec<TypeConstructor>,
+    },
 }
 
 #[derive(Debug)]
