@@ -27,14 +27,17 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 }
             },
 
-            mir::Expr::TypeInst { type_name, params } => {
+            mir::Expr::TypeInst { tag, params } => {
                 // First field is tag
                 let type_struct = self.ptr_struct_type(params.len() + 1);
                 let type_struct_size = type_struct.size_of().unwrap();
 
-                let values = params
-                    .into_iter()
-                    .map(|param_name| self.variables[param_name].as_basic_value_enum());
+                let tag_value = self.compile_literal(&crate::literal::Literal::Int(*tag));
+                let values = std::iter::once(tag_value).chain(
+                    params
+                        .into_iter()
+                        .map(|param_name| self.variables[param_name].as_basic_value_enum()),
+                );
 
                 let type_struct_ptr = self
                     .builder
@@ -47,12 +50,22 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                     .try_as_basic_value()
                     .unwrap_left();
 
-                // Store tag
-
                 // Store values
-                for (i, value) in values.into_iter().enumerate() {}
+                for (i, value) in values.into_iter().enumerate() {
+                    let val_ptr = self
+                        .builder
+                        .build_struct_gep(
+                            type_struct,
+                            type_struct_ptr.into_pointer_value(),
+                            i as u32,
+                            "_env_field",
+                        )
+                        .unwrap();
 
-                todo!()
+                    self.builder.build_store(val_ptr, value).unwrap();
+                }
+
+                type_struct_ptr.into_pointer_value().as_basic_value_enum()
             }
 
             mir::Expr::Closure { fun_name, env } => {

@@ -5,7 +5,7 @@ pub enum Expr {
     Lit(Literal),
     Var(String),
     TypeInst {
-        type_name: String,
+        tag: i64,
         params: Vec<String>,
     },
     Closure {

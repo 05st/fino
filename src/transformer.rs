@@ -267,38 +267,60 @@ impl<'a> Transformer<'a> {
                 } => {
                     let type_definition_id = toplevel.definition_id.as_ref().unwrap();
 
-                    for constr in constructors {
-                        let param_names = repeat_with(|| self.new_misc_name("param"))
-                            .take(constr.params.len())
-                            .collect::<Vec<_>>();
-
-                        let body = param_names.iter().enumerate().fold(
-                            mir::Expr::TypeInst {
-                                type_name: self.get_mangled_name(type_definition_id),
-                                params: param_names.clone(),
-                            },
-                            |child, (i, param)| {
-                                let fun_name = self.new_misc_name("typeconstr");
-                                let env = param_names.iter().take(i).cloned().collect::<Vec<_>>();
-                                let global = mir::Toplevel::Function {
-                                    name: fun_name.clone(),
-                                    env: env.clone(),
-                                    param: param.clone(),
-                                    body: child,
-                                };
-                                self.globals.push(global);
-                                mir::Expr::Closure { fun_name, env }
-                            },
-                        );
-
+                    for (i, constr) in constructors.iter().enumerate() {
                         let full_mangled_name =
                             self.get_mangled_name(type_definition_id) + "_" + &constr.name;
-                        let global = mir::Toplevel::Function {
-                            name: full_mangled_name,
-                            env: param_names,
-                            param: self.new_misc_name("param_ignored"),
-                            body,
+
+                        let global = if constr.params.is_empty() {
+                            mir::Toplevel::Variable {
+                                name: full_mangled_name,
+                                body: mir::Expr::TypeInst {
+                                    tag: i as i64,
+                                    params: Vec::new(),
+                                },
+                                is_main: false,
+                            }
+                        } else {
+                            let num_params = constr.params.len();
+                            let param_names = repeat_with(|| self.new_misc_name("param"))
+                                .take(num_params)
+                                .collect::<Vec<_>>();
+
+                            let body = param_names
+                                .iter()
+                                .rev()
+                                .take(num_params - 1)
+                                .enumerate()
+                                .fold(
+                                    mir::Expr::TypeInst {
+                                        tag: i as i64,
+                                        params: param_names.clone(),
+                                    },
+                                    |child, (pi, param_name)| {
+                                        let fun_name = self.new_misc_name("typeconstr");
+                                        let env = param_names
+                                            .iter()
+                                            .take(num_params - pi - 1)
+                                            .cloned()
+                                            .collect::<Vec<_>>();
+                                        self.globals.push(mir::Toplevel::Function {
+                                            name: fun_name.clone(),
+                                            env: env.clone(),
+                                            param: param_name.clone(),
+                                            body: child,
+                                        });
+                                        mir::Expr::Closure { fun_name, env }
+                                    },
+                                );
+
+                            mir::Toplevel::Function {
+                                name: full_mangled_name,
+                                env: Vec::new(),
+                                param: param_names[0].clone(),
+                                body,
+                            }
                         };
+
                         self.globals.push(global);
                     }
                 }

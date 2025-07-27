@@ -2,7 +2,7 @@ import mandelbrot
 import factorial
 import stl.prelude
 
-// type List a = Nil | Cons a (List a)
+type List a = Nil | Cons a (List a)
 
 // fn map : (a -> b) -> (List a) -> (List b)
 //     f l = List::Nil
@@ -12,4 +12,4 @@ import stl.prelude
 
 fn f : a -> a
     x = x
-let main : unit = f 12 >> println_str (f "test") >> f ()
+let main : unit = f 12 >> println_str (f "test") >> (List::Cons 12 List::Nil) >> f ()

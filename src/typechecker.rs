@@ -350,15 +350,22 @@ impl<'a> TypeChecker<'a> {
                     constructors,
                 } => {
                     for constr in constructors {
-                        let constr_type = constr.params.iter().rev().fold(
+                        let result_type = type_vars.iter().fold(
                             Type::Const {
                                 // Maybe we should use the qualified name instead?
                                 name: Name::Unqualified(toplevel.name.clone()),
                                 location: toplevel.location.clone(),
                                 definition_id: toplevel.definition_id.clone(),
                             },
-                            |child, t| Type::Fun(Box::new(t.clone()), Box::new(child)),
+                            |child, tv| Type::App(Box::new(child), Box::new(Type::Var(tv.clone()))),
                         );
+
+                        let constr_type =
+                            constr.params.iter().rev().fold(result_type, |child, t| {
+                                Type::Fun(Box::new(t.clone()), Box::new(child))
+                            });
+
+                        println!("{:?}", constr_type);
 
                         let mut extracted_type_vars = BTreeSet::new();
                         constr_type.extract_type_vars(&mut extracted_type_vars);

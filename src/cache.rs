@@ -25,6 +25,7 @@ pub enum DefinitionKind {
 #[derive(Debug)]
 pub struct Definition {
     pub kind: DefinitionKind,
+    #[allow(dead_code)]
     pub location: Location,
     pub mangled_name: Vec<String>,
     pub local: bool,
