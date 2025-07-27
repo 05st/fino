@@ -12,4 +12,10 @@ type List a = Nil | Cons a (List a)
 
 fn f : a -> a
     x = x
-let main : unit = f 12 >> println_str (f "test") >> (List::Cons 12 List::Nil) >> f ()
+let main : unit = f 12 >> println_str (f "test") >> (List::Cons 12 List::Nil) >> three >> two >> f ()
+
+type Nat = Zero | Succ Nat
+
+let one : Nat = Nat::Succ Nat::Zero
+let two : Nat = Nat::Succ one
+let three : Nat = Nat::Succ (Nat::Succ (Nat::Succ Nat::Zero))

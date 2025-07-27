@@ -365,8 +365,6 @@ impl<'a> TypeChecker<'a> {
                                 Type::Fun(Box::new(t.clone()), Box::new(child))
                             });
 
-                        println!("{:?}", constr_type);
-
                         let mut extracted_type_vars = BTreeSet::new();
                         constr_type.extract_type_vars(&mut extracted_type_vars);
 

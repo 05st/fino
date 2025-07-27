@@ -55,7 +55,7 @@ impl Error {
         let source = read_to_string(self.location.path.as_path()).unwrap();
         let filename = self.location.path.to_string_lossy().into_owned();
 
-        Report::build(ReportKind::Error, &filename, self.location.span.start)
+        Report::build(ReportKind::Error, (&filename, self.location.span.clone()))
             .with_message(self.kind.to_string())
             .with_label(Label::new((&filename, self.location.span.clone())).with_color(Color::Red))
             .finish()

@@ -41,7 +41,7 @@ impl<'a> ModuleSorter<'a> {
         }
     }
 
-    // Topological sort by depth-first-search
+    // Toposort
     fn process_module(
         &mut self,
         module_path: Vec<String>,
