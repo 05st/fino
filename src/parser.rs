@@ -42,7 +42,7 @@ macro_rules! expected_one_of {
 }
 
 impl<'a> Parser<'a> {
-    fn new(compiler_cache: &'a mut CompilerCache) -> Parser {
+    fn new(compiler_cache: &mut CompilerCache) -> Parser {
         Parser {
             compiler_cache,
             tokens: VecDeque::new(),

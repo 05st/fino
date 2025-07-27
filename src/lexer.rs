@@ -181,7 +181,7 @@ pub fn tokenize(
                 return Err(
                     // Translate lexer error
                     Error::new(ErrorKind::UnknownToken, Location::new(filepath, span)),
-                )
+                );
             }
         }
     }

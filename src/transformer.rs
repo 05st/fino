@@ -1,6 +1,10 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, iter::repeat_with};
 
-use crate::{ast, cache::{CompilerCache, DefinitionId}, mir};
+use crate::{
+    ast,
+    cache::{CompilerCache, DefinitionId},
+    mir,
+};
 
 struct Transformer<'a> {
     compiler_cache: &'a mut CompilerCache,
@@ -10,7 +14,7 @@ struct Transformer<'a> {
 }
 
 impl<'a> Transformer<'a> {
-    fn new(compiler_cache: &'a mut CompilerCache) -> Transformer {
+    fn new(compiler_cache: &mut CompilerCache) -> Transformer {
         Transformer {
             compiler_cache,
             globals: Vec::new(),
@@ -30,11 +34,19 @@ impl<'a> Transformer<'a> {
     }
 
     // Collects all the free variables in an expression
-    fn collect_free_vars(&self, expr: &ast::Expr, scope: im::HashSet<DefinitionId>, free_vars: &mut Vec<String>) {
+    fn collect_free_vars(
+        &self,
+        expr: &ast::Expr,
+        scope: im::HashSet<DefinitionId>,
+        free_vars: &mut Vec<String>,
+    ) {
         match &expr.kind {
             ast::ExprKind::Lit(_) => (),
 
-            ast::ExprKind::Var { name: _, definition_id } => {
+            ast::ExprKind::Var {
+                name: _,
+                definition_id,
+            } => {
                 let definition_id = definition_id.as_ref().unwrap();
                 // We don't want to treat references to let-definitions as free variables
                 if self.compiler_cache[definition_id].local && !scope.contains(definition_id) {
@@ -50,18 +62,31 @@ impl<'a> Transformer<'a> {
                 self.collect_free_vars(arg, scope, free_vars);
             }
 
-            ast::ExprKind::Extern { fun_name: _, args, prim_type: _ } => {
+            ast::ExprKind::Extern {
+                fun_name: _,
+                args,
+                prim_type: _,
+            } => {
                 for arg in args {
                     self.collect_free_vars(arg, scope.clone(), free_vars);
                 }
             }
 
-            ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
+            ast::ExprKind::Lam {
+                param_name: _,
+                body,
+                param_definition_id,
+            } => {
                 let updated_scope = scope.update(param_definition_id.clone().unwrap());
                 self.collect_free_vars(body, updated_scope, free_vars);
             }
 
-            ast::ExprKind::Let { name: _, aexpr, body, definition_id } => {
+            ast::ExprKind::Let {
+                name: _,
+                aexpr,
+                body,
+                definition_id,
+            } => {
                 let updated_scope = scope.update(definition_id.clone().unwrap());
                 // Notice we don't use updated_scope for aexpr
                 self.collect_free_vars(aexpr, scope, free_vars);
@@ -80,7 +105,10 @@ impl<'a> Transformer<'a> {
         match &expr.kind {
             ast::ExprKind::Lit(literal) => mir::Expr::Lit(literal.clone()),
 
-            ast::ExprKind::Var { name: _, definition_id } => {
+            ast::ExprKind::Var {
+                name: _,
+                definition_id,
+            } => {
                 let definition_id = definition_id.as_ref().unwrap();
                 let mangled_name = self.get_mangled_name(definition_id);
 
@@ -94,19 +122,32 @@ impl<'a> Transformer<'a> {
                 }
             }
 
-            ast::ExprKind::TypeConstr { type_name: _, constr_name, type_definition_id } => {
+            ast::ExprKind::TypeConstr {
+                type_name: _,
+                constr_name,
+                type_definition_id,
+            } => {
                 let type_definition_id = type_definition_id.as_ref().unwrap();
-                let full_mangled_name = self.get_mangled_name(type_definition_id) + "_" + constr_name;
+                let full_mangled_name =
+                    self.get_mangled_name(type_definition_id) + "_" + constr_name;
 
-                mir::Expr::Closure { fun_name: full_mangled_name, env: Vec::new() }
-            }
-
-            ast::ExprKind::Extern { fun_name, args, prim_type: _ } => {
-                mir::Expr::Extern {
-                    fun_name: fun_name.clone(),
-                    args: args.into_iter().map(|arg| self.transform_expr(arg)).collect(),
+                mir::Expr::Closure {
+                    fun_name: full_mangled_name,
+                    env: Vec::new(),
                 }
             }
+
+            ast::ExprKind::Extern {
+                fun_name,
+                args,
+                prim_type: _,
+            } => mir::Expr::Extern {
+                fun_name: fun_name.clone(),
+                args: args
+                    .into_iter()
+                    .map(|arg| self.transform_expr(arg))
+                    .collect(),
+            },
 
             ast::ExprKind::App { fun, arg } => {
                 mir::Expr::App {
@@ -114,9 +155,13 @@ impl<'a> Transformer<'a> {
                     closure: Box::new(self.transform_expr(fun)),
                     arg: Box::new(self.transform_expr(arg)),
                 }
-            },
+            }
 
-            ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
+            ast::ExprKind::Lam {
+                param_name: _,
+                body,
+                param_definition_id,
+            } => {
                 let mut free_vars = Vec::new();
                 self.collect_free_vars(expr, im::HashSet::new(), &mut free_vars);
 
@@ -137,21 +182,22 @@ impl<'a> Transformer<'a> {
                 }
             }
 
-            ast::ExprKind::Let { name: _, aexpr, body, definition_id } => {
-                mir::Expr::Let {
-                    name: self.get_mangled_name(definition_id.as_ref().unwrap()),
-                    aexpr: Box::new(self.transform_expr(aexpr)),
-                    body: Box::new(self.transform_expr(body)),
-                }
-            }
+            ast::ExprKind::Let {
+                name: _,
+                aexpr,
+                body,
+                definition_id,
+            } => mir::Expr::Let {
+                name: self.get_mangled_name(definition_id.as_ref().unwrap()),
+                aexpr: Box::new(self.transform_expr(aexpr)),
+                body: Box::new(self.transform_expr(body)),
+            },
 
-            ast::ExprKind::If { cond, texpr, fexpr } => {
-                mir::Expr::If {
-                    cond: Box::new(self.transform_expr(cond)),
-                    texpr: Box::new(self.transform_expr(texpr)),
-                    fexpr: Box::new(self.transform_expr(fexpr)),
-                }
-            }
+            ast::ExprKind::If { cond, texpr, fexpr } => mir::Expr::If {
+                cond: Box::new(self.transform_expr(cond)),
+                texpr: Box::new(self.transform_expr(texpr)),
+                fexpr: Box::new(self.transform_expr(fexpr)),
+            },
         }
     }
 
@@ -159,18 +205,20 @@ impl<'a> Transformer<'a> {
         // Declare all toplevels first
         for toplevel in &module.toplevels {
             match &toplevel.kind {
-                ast::ToplevelKind::Let { type_scheme: _, expr, is_main: _ } => {
+                ast::ToplevelKind::Let {
+                    type_scheme: _,
+                    expr,
+                    is_main: _,
+                } => {
                     // If the top expression of a let-definition is a lambda, create a MIR function instead
                     // Note all top expressions in let-definitions should have zero free variables.
                     if let ast::ExprKind::Lam { .. } = &expr.kind {
-                        self.functions.insert(toplevel.definition_id.clone().unwrap());
+                        self.functions
+                            .insert(toplevel.definition_id.clone().unwrap());
                     }
                 }
 
-                ast::ToplevelKind::Type { type_vars: _, constructors } => {
-
-                    todo!()
-                }
+                ast::ToplevelKind::Type { .. } => (),
             }
         }
 
@@ -179,9 +227,17 @@ impl<'a> Transformer<'a> {
             let name = self.get_mangled_name(toplevel.definition_id.as_ref().unwrap());
 
             match &toplevel.kind {
-                ast::ToplevelKind::Let { type_scheme: _, expr, is_main } => {
+                ast::ToplevelKind::Let {
+                    type_scheme: _,
+                    expr,
+                    is_main,
+                } => {
                     let global = match &expr.kind {
-                        ast::ExprKind::Lam { param_name: _, body, param_definition_id } => {
+                        ast::ExprKind::Lam {
+                            param_name: _,
+                            body,
+                            param_definition_id,
+                        } => {
                             let transformed_body = self.transform_expr(body);
 
                             mir::Toplevel::Function {
@@ -190,7 +246,7 @@ impl<'a> Transformer<'a> {
                                 param: self.get_mangled_name(param_definition_id.as_ref().unwrap()),
                                 body: transformed_body,
                             }
-                        },
+                        }
 
                         _ => {
                             let transformed_body = self.transform_expr(expr);
@@ -205,7 +261,47 @@ impl<'a> Transformer<'a> {
                     self.globals.push(global);
                 }
 
-                ast::ToplevelKind::Type { type_vars, constructors } => todo!(),
+                ast::ToplevelKind::Type {
+                    type_vars: _,
+                    constructors,
+                } => {
+                    let type_definition_id = toplevel.definition_id.as_ref().unwrap();
+
+                    for constr in constructors {
+                        let param_names = repeat_with(|| self.new_misc_name("param"))
+                            .take(constr.params.len())
+                            .collect::<Vec<_>>();
+
+                        let body = param_names.iter().enumerate().fold(
+                            mir::Expr::TypeInst {
+                                type_name: self.get_mangled_name(type_definition_id),
+                                params: param_names.clone(),
+                            },
+                            |child, (i, param)| {
+                                let fun_name = self.new_misc_name("typeconstr");
+                                let env = param_names.iter().take(i).cloned().collect::<Vec<_>>();
+                                let global = mir::Toplevel::Function {
+                                    name: fun_name.clone(),
+                                    env: env.clone(),
+                                    param: param.clone(),
+                                    body: child,
+                                };
+                                self.globals.push(global);
+                                mir::Expr::Closure { fun_name, env }
+                            },
+                        );
+
+                        let full_mangled_name =
+                            self.get_mangled_name(type_definition_id) + "_" + &constr.name;
+                        let global = mir::Toplevel::Function {
+                            name: full_mangled_name,
+                            env: param_names,
+                            param: self.new_misc_name("param_ignored"),
+                            body,
+                        };
+                        self.globals.push(global);
+                    }
+                }
             }
         }
     }

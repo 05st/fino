@@ -5,9 +5,17 @@ use crate::literal::Literal;
 use super::LLVMCodegen;
 
 impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
-    fn build_new_literal_call(&self, fn_name: &str, args: &[BasicMetadataValueEnum<'ctx>]) -> BasicValueEnum<'ctx> {
+    fn build_new_literal_call(
+        &self,
+        fn_name: &str,
+        args: &[BasicMetadataValueEnum<'ctx>],
+    ) -> BasicValueEnum<'ctx> {
         self.builder
-            .build_call(self.get_function(fn_name), args, format!("_{}_call", fn_name).as_str())
+            .build_call(
+                self.get_function(fn_name),
+                args,
+                format!("_{}_call", fn_name).as_str(),
+            )
             .unwrap()
             .try_as_basic_value()
             .unwrap_left()
@@ -28,7 +36,10 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
             Literal::String(s) => {
                 let len_value = self.context.i64_type().const_int(s.len() as u64, false);
                 let string_ptr = self.get_string_literal(s).as_pointer_value();
-                self.build_new_literal_call("_fino_string_new", &[string_ptr.into(), len_value.into()])
+                self.build_new_literal_call(
+                    "_fino_string_new",
+                    &[string_ptr.into(), len_value.into()],
+                )
             }
 
             Literal::Char(c) => {

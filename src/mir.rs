@@ -4,6 +4,10 @@ use crate::literal::Literal;
 pub enum Expr {
     Lit(Literal),
     Var(String),
+    TypeInst {
+        type_name: String,
+        params: Vec<String>,
+    },
     Closure {
         fun_name: String,
         env: Vec<String>,
@@ -40,5 +44,5 @@ pub enum Toplevel {
         name: String,
         body: Expr,
         is_main: bool,
-    }
+    },
 }

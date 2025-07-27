@@ -1,16 +1,23 @@
-use std::{collections::{HashMap, HashSet}, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 use inkwell::{
-    basic_block::BasicBlock, builder::Builder, context::Context, module::Module, types::{FunctionType, PointerType, StructType}, values::{
-        FunctionValue, GlobalValue, PointerValue
-    }, AddressSpace
+    basic_block::BasicBlock,
+    builder::Builder,
+    context::Context,
+    module::Module,
+    types::{FunctionType, PointerType, StructType},
+    values::{FunctionValue, GlobalValue, PointerValue},
+    AddressSpace,
 };
 
 use crate::{cache::CompilerCache, mir};
 
 mod expr;
-mod toplevel;
 mod literal;
+mod toplevel;
 
 struct LLVMCodegen<'a, 'ctx> {
     compiler_cache: &'a mut CompilerCache,
@@ -30,7 +37,12 @@ struct LLVMCodegen<'a, 'ctx> {
 }
 
 impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
-    fn new(compiler_cache: &'a mut CompilerCache, context: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx>) -> LLVMCodegen<'a, 'ctx> {
+    fn new(
+        compiler_cache: &'a mut CompilerCache,
+        context: &'ctx Context,
+        builder: &'a Builder<'ctx>,
+        module: &'a Module<'ctx>,
+    ) -> LLVMCodegen<'a, 'ctx> {
         LLVMCodegen {
             compiler_cache,
             context,
@@ -46,7 +58,9 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
     }
 
     fn get_function(&self, name: &str) -> FunctionValue<'ctx> {
-        self.module.get_function(name).expect(format!("Unknown LLVM function {}", name).as_str())
+        self.module
+            .get_function(name)
+            .expect(format!("Unknown LLVM function {}", name).as_str())
     }
 
     fn get_string_literal(&mut self, lit: impl Into<String>) -> GlobalValue<'ctx> {
@@ -62,7 +76,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 .iter()
                 .map(|c| self.context.i8_type().const_int((*c).into(), false))
                 .collect();
-            
+
             let global = self.module.add_global(array_type, None, str.as_str());
             global.set_initializer(&self.context.i8_type().const_array(&array_values));
 
@@ -78,11 +92,13 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
     }
 
     fn ptr_struct_type(&self, size: usize) -> StructType<'ctx> {
-        self.context.struct_type(&[self.ptr_type().into()].repeat(size), false)
+        self.context
+            .struct_type(&[self.ptr_type().into()].repeat(size), false)
     }
 
     fn ptr_fn_type(&self, arity: usize) -> FunctionType<'ctx> {
-        self.ptr_type().fn_type(&[self.ptr_type().into()].repeat(arity), false)
+        self.ptr_type()
+            .fn_type(&[self.ptr_type().into()].repeat(arity), false)
     }
 
     fn add_variable(&mut self, name: String, value: PointerValue<'ctx>) {
@@ -97,13 +113,15 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
     }
 
     fn append_block(&self, name: &str) -> BasicBlock<'ctx> {
-        self.context.append_basic_block(self.cur_function.expect("Not inside a function"), name)
+        self.context
+            .append_basic_block(self.cur_function.expect("Not inside a function"), name)
     }
 
     fn declare_runtime(&self) {
         // Declare all externed functions
         for (name, arity) in &self.compiler_cache.externs {
-            self.module.add_function(name.as_str(), self.ptr_fn_type(*arity), None);
+            self.module
+                .add_function(name.as_str(), self.ptr_fn_type(*arity), None);
         }
 
         // Utility functions to help define builtin functions
@@ -113,25 +131,35 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 self.ptr_type().fn_type(param_types.as_slice(), false),
                 None,
             );
-            self.module.add_function(format!("{}_print", prefix).as_str(), self.ptr_fn_type(1), None);
+            self.module.add_function(
+                format!("{}_print", prefix).as_str(),
+                self.ptr_fn_type(1),
+                None,
+            );
         };
 
         declare_wrapper_fns("_fino_bool", vec![self.context.bool_type().into()]);
         declare_wrapper_fns("_fino_char", vec![self.context.i8_type().into()]);
         declare_wrapper_fns("_fino_int", vec![self.context.i64_type().into()]);
         declare_wrapper_fns("_fino_float", vec![self.context.f64_type().into()]);
-        declare_wrapper_fns("_fino_string", vec![self.ptr_type().into(), self.context.i64_type().into()]);
+        declare_wrapper_fns(
+            "_fino_string",
+            vec![self.ptr_type().into(), self.context.i64_type().into()],
+        );
 
         // Special get function for unboxing bools, for use by conditional branching
         self.module.add_function(
             "_fino_bool_get",
-            self.context.bool_type().fn_type(&[self.ptr_type().into()], false),
+            self.context
+                .bool_type()
+                .fn_type(&[self.ptr_type().into()], false),
             None,
         );
 
         self.module.add_function(
             "GC_malloc",
-            self.ptr_type().fn_type(&[self.context.i64_type().into()], false),
+            self.ptr_type()
+                .fn_type(&[self.context.i64_type().into()], false),
             None,
         );
     }
@@ -146,18 +174,22 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
         // If there is an entry point
         if let Some(entry_fn) = self.entry_point {
             // Call fino main function
-            self.builder.build_call(
-                entry_fn,
-                &[self.ptr_type().const_null().into()],
-                "_main_call"
-            ).unwrap();
+            self.builder
+                .build_call(
+                    entry_fn,
+                    &[self.ptr_type().const_null().into()],
+                    "_main_call",
+                )
+                .unwrap();
         }
 
         // Build return for main function
         self.builder.build_return(None).unwrap();
 
         // Output to file
-        self.module.print_to_file(format!("{}.ll", path.display())).unwrap();
+        self.module
+            .print_to_file(format!("{}.ll", path.display()))
+            .unwrap();
         self.module.strip_debug_info();
         self.module.write_bitcode_to_path(path);
     }

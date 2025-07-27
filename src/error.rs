@@ -25,7 +25,7 @@ pub enum ErrorKind {
 
     // Name resolution errors
     Undefined(Vec<String>),
-    Redefinition(Vec<String>), // Only possible with toplevel definitions
+    Redefinition(Vec<String>),   // Only possible with toplevel definitions
     MultipleDefinitions(String), // Only possible when looking up unqualified name
     ExportedUnimportedModule(Vec<String>),
     AlreadyImportedModule(Vec<String>),
@@ -74,10 +74,19 @@ impl Display for ErrorKind {
                 if allowed.len() == 1 {
                     write!(f, "Expected {} here, got {}", allowed[0], got)
                 } else {
-                    write!(f, "Expected one of {} here, got {}", allowed.join(", "), got)
+                    write!(
+                        f,
+                        "Expected one of {} here, got {}",
+                        allowed.join(", "),
+                        got
+                    )
                 }
             }
-            InvalidIndentation(got, exp) => write!(f, "Invalid indentation of size {} here, expected at least {}", got, exp),
+            InvalidIndentation(got, exp) => write!(
+                f,
+                "Invalid indentation of size {} here, expected at least {}",
+                got, exp
+            ),
             UndeclaredOperator(oper) => write!(f, "Undeclared operator {} encountered here", oper),
             InvalidPrefixOperator(oper) => write!(f, "Invalid prefix operator {}", oper),
             MultipleMainDefinitions => write!(f, "Found multiple main definitions"),
@@ -85,19 +94,26 @@ impl Display for ErrorKind {
             DuplicateTypeVariable(tvar) => write!(f, "Duplicate type variable {}", tvar),
 
             CircularDependency => write!(f, "Modules have a circular dependency"),
-            UnknownModule(module_path) => write!(f, "Could not find module {}", module_path.join(".")),
+            UnknownModule(module_path) => {
+                write!(f, "Could not find module {}", module_path.join("."))
+            }
 
             Undefined(name) => write!(f, "{} is not defined", name.join(".")),
             Redefinition(qual) => write!(f, "{} is already defined", qual.join(".")),
             MultipleDefinitions(name) => write!(f, "Multiple definitions for {} found", name),
-            ExportedUnimportedModule(module_path) => write!(f, "Module {} was never imported", module_path.join(".")),
-            AlreadyImportedModule(module_path) => write!(f, "Module {} was already imported", module_path.join(".")),
+            ExportedUnimportedModule(module_path) => {
+                write!(f, "Module {} was never imported", module_path.join("."))
+            }
+            AlreadyImportedModule(module_path) => {
+                write!(f, "Module {} was already imported", module_path.join("."))
+            }
             // AlreadyExportedDefinition(name) => write!(f, "{} was already exported", name),
             // AlreadyExportedModule(module_path) => write!(f, "{} was already exported", module_path.join(".")),
-
-            TypeMismatch(type_a, type_b) => write!(f, "Type mismatch between {} and {} here", type_a, type_b),
+            TypeMismatch(type_a, type_b) => {
+                write!(f, "Type mismatch between {} and {} here", type_a, type_b)
+            }
             InfiniteType(t) => write!(f, "Attempt to construct infinite type {} here", t),
-            UndefinedTypeVariable(tvar) => write!(f, "Undefined type variable {}", tvar)
+            UndefinedTypeVariable(tvar) => write!(f, "Undefined type variable {}", tvar),
         }
     }
 }

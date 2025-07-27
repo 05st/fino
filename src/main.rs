@@ -2,8 +2,8 @@ use std::path::Path;
 
 use cache::CompilerCache;
 use clap::Parser as _;
-use llvm::compile_llvm;
 use error::Error;
+use llvm::compile_llvm;
 use parser::parse_program;
 use resolver::resolve_program;
 use sorter::sort_program;
@@ -13,10 +13,10 @@ use walkdir::{DirEntry, WalkDir};
 
 mod ast;
 mod cache;
-mod llvm;
 mod error;
 mod lexer;
 mod literal;
+mod llvm;
 mod location;
 mod mir;
 mod parser;

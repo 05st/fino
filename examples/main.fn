@@ -7,5 +7,9 @@ import stl.prelude
 // fn map : (a -> b) -> (List a) -> (List b)
 //     f l = List::Nil
 
-let main : unit = mandelbrot >> println_str "What is your name?" >> println_str ("Hello, " ++ readline ++ "!")
+// let main : unit = mandelbrot >> println_str "What is your name?" >> println_str ("Hello, " ++ readline ++ "!")
 // let main : unit = println_int (factorial 7)
+
+fn f : a -> a
+    x = x
+let main : unit = f 12 >> println_str (f "test") >> f ()

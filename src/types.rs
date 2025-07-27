@@ -1,4 +1,7 @@
-use std::{collections::{BTreeSet, HashMap}, fmt::Display};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Display,
+};
 
 use ena::unify::{EqUnifyValue, UnifyKey};
 
@@ -30,10 +33,11 @@ pub enum Type {
     Var(TypeVar),
     UniVar(TypeUniVar),
     Prim(TypePrim), // Primitive type
-    Const { // Type constant
+    Const {
+        // Type constant
         name: Name,
         location: Location,
-        definition_id: Option<DefinitionId>
+        definition_id: Option<DefinitionId>,
     },
     App(Box<Type>, Box<Type>),
     Fun(Box<Type>, Box<Type>),
@@ -131,13 +135,15 @@ impl Type {
                 }
             }
 
-            Type::App(base, arg) => {
-                Type::App(Box::new(base.substitute(subst)), Box::new(arg.substitute(subst)))
-            }
+            Type::App(base, arg) => Type::App(
+                Box::new(base.substitute(subst)),
+                Box::new(arg.substitute(subst)),
+            ),
 
-            Type::Fun(arg, ret) => {
-                Type::Fun(Box::new(arg.substitute(subst)), Box::new(ret.substitute(subst)))
-            }
+            Type::Fun(arg, ret) => Type::Fun(
+                Box::new(arg.substitute(subst)),
+                Box::new(ret.substitute(subst)),
+            ),
         }
     }
 }
@@ -148,7 +154,11 @@ impl Display for Type {
             Type::Var(type_var) => write!(f, "{}", type_var),
             Type::UniVar(uni_var) => write!(f, "{}", uni_var),
             Type::Prim(prim) => write!(f, "{}", prim),
-            Type::Const { name, location: _, definition_id: _ }  => write!(f, "{}", name.get_unqualified_part()),
+            Type::Const {
+                name,
+                location: _,
+                definition_id: _,
+            } => write!(f, "{}", name.get_unqualified_part()),
             Type::App(base, arg) => write!(f, "{} {}", base, arg),
             Type::Fun(arg, ret) => write!(f, "{} -> {}", arg, ret),
         }

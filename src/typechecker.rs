@@ -22,7 +22,7 @@ struct TypeChecker<'a> {
 }
 
 impl<'a> TypeChecker<'a> {
-    fn new(compiler_cache: &'a mut CompilerCache) -> TypeChecker {
+    fn new(compiler_cache: &mut CompilerCache) -> TypeChecker {
         TypeChecker {
             compiler_cache,
             unification_table: InPlaceUnificationTable::new(),
@@ -86,13 +86,15 @@ impl<'a> TypeChecker<'a> {
                 type_definition_id,
             } => {
                 // how can we avoid these clones?
-                let constr_scheme = &self.type_constrs[&(type_definition_id.as_ref().unwrap().clone(), constr_name.clone())].clone();
+                let constr_scheme = &self.type_constrs[&(
+                    type_definition_id.as_ref().unwrap().clone(),
+                    constr_name.clone(),
+                )]
+                    .clone();
                 let subst = constr_scheme
                     .0
                     .iter()
-                    .map(|tvar| {
-                        (Type::Var(tvar.clone()), Type::UniVar(self.fresh_uni_var()))
-                    })
+                    .map(|tvar| (Type::Var(tvar.clone()), Type::UniVar(self.fresh_uni_var())))
                     .collect::<HashMap<_, _>>();
                 (Vec::new(), constr_scheme.1.substitute(&subst))
             }
@@ -360,18 +362,21 @@ impl<'a> TypeChecker<'a> {
 
                         let mut extracted_type_vars = BTreeSet::new();
                         constr_type.extract_type_vars(&mut extracted_type_vars);
-                        
+
                         // Ensure all type variables were closed over
                         for type_var in extracted_type_vars.iter() {
                             if !type_vars.contains(&type_var) {
                                 // TODO: Use better location for type variable
-                                return Err(Error::new(ErrorKind::UndefinedTypeVariable(type_var.clone()), toplevel.location.clone()));
+                                return Err(Error::new(
+                                    ErrorKind::UndefinedTypeVariable(type_var.clone()),
+                                    toplevel.location.clone(),
+                                ));
                             }
                         }
 
                         self.type_constrs.insert(
                             (toplevel.definition_id.clone().unwrap(), constr.name.clone()),
-                            TypeScheme(extracted_type_vars, constr_type)
+                            TypeScheme(extracted_type_vars, constr_type),
                         );
                     }
                 }
@@ -396,7 +401,7 @@ impl<'a> TypeChecker<'a> {
                 ToplevelKind::Type {
                     type_vars: _,
                     constructors: _,
-                } => { } // Shouldn't have to do anything (?)
+                } => {} // Shouldn't have to do anything (?)
             }
         }
 

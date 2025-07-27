@@ -3,7 +3,8 @@ use std::collections::{HashMap, VecDeque};
 use crate::{
     ast::Module,
     cache::{CompilerCache, ModuleId},
-    error::{Error, ErrorKind}, location::Location
+    error::{Error, ErrorKind},
+    location::Location,
 };
 
 enum ModuleState {
@@ -20,7 +21,7 @@ struct ModuleSorter<'a> {
 }
 
 impl<'a> ModuleSorter<'a> {
-    fn new(compiler_cache: &'a mut CompilerCache) -> ModuleSorter {
+    fn new(compiler_cache: &mut CompilerCache) -> ModuleSorter {
         let mut module_map = HashMap::new();
         let mut processing_queue = Vec::new();
 
@@ -41,12 +42,21 @@ impl<'a> ModuleSorter<'a> {
     }
 
     // Topological sort by depth-first-search
-    fn process_module(&mut self, module_path: Vec<String>, import_location: Option<Location>) -> Result<ModuleId, Error> {
+    fn process_module(
+        &mut self,
+        module_path: Vec<String>,
+        import_location: Option<Location>,
+    ) -> Result<ModuleId, Error> {
         use ModuleState::*;
 
         match self.module_state.get(&module_path) {
             Some(state) => match state {
-                Processing => return Err(Error::new(ErrorKind::CircularDependency, import_location.unwrap().clone())),
+                Processing => {
+                    return Err(Error::new(
+                        ErrorKind::CircularDependency,
+                        import_location.unwrap().clone(),
+                    ))
+                }
                 Processed => return Ok(self.compiler_cache.module_ids[&module_path].clone()),
             },
             None => self.module_state.insert(module_path.clone(), Processing),
@@ -56,12 +66,17 @@ impl<'a> ModuleSorter<'a> {
         // otherwise, it means an undefined module was attempted to be imported.
         // Note we use a thunk with ok_or_else since ok_or is eagerly evaluated and
         // panics for base calls of process_module when import_location is None.
-        let mut module = self.module_map
-            .remove(&module_path)
-            .ok_or_else(|| Error::new(ErrorKind::UnknownModule(module_path.clone()), import_location.unwrap().clone()))?;
+        let mut module = self.module_map.remove(&module_path).ok_or_else(|| {
+            Error::new(
+                ErrorKind::UnknownModule(module_path.clone()),
+                import_location.unwrap().clone(),
+            )
+        })?;
 
         for import in module.imports.iter_mut() {
-            import.module_id = Some(self.process_module(import.module_path.clone(), Some(import.location.clone()))?);
+            import.module_id = Some(
+                self.process_module(import.module_path.clone(), Some(import.location.clone()))?,
+            );
         }
 
         *self.module_state.get_mut(&module.module_path).unwrap() = ModuleState::Processed;
@@ -70,7 +85,9 @@ impl<'a> ModuleSorter<'a> {
         module.module_id = Some(module_id.clone());
         self.sorted_modules.push(module);
 
-        self.compiler_cache.module_ids.insert(module_path, module_id.clone());
+        self.compiler_cache
+            .module_ids
+            .insert(module_path, module_id.clone());
 
         Ok(module_id)
     }
