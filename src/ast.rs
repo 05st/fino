@@ -26,6 +26,11 @@ impl Name {
 }
 
 #[derive(Debug)]
+pub enum Pattern {
+    Lit(Literal),
+}
+
+#[derive(Debug)]
 pub enum ExprKind {
     Lit(Literal),
     // A variable / type constant name can be a qualified or unqualified name. A variable written as a
@@ -34,9 +39,9 @@ pub enum ExprKind {
         name: Name,
         definition_id: Option<DefinitionId>,
     },
-    TypeConstr {
+    Variant {
         type_name: Name,
-        constr_name: String,
+        variant_name: String,
         type_definition_id: Option<DefinitionId>,
     },
     App {
@@ -64,6 +69,10 @@ pub enum ExprKind {
         texpr: Box<Expr>,
         fexpr: Box<Expr>,
     },
+    Match {
+        mexpr: Box<Expr>,
+        branches: Vec<(Pattern, Expr)>,
+    },
 }
 
 #[derive(Debug)]
@@ -73,9 +82,9 @@ pub struct Expr {
 }
 
 #[derive(Debug)]
-pub struct TypeConstructor {
+pub struct TypeVariant {
     pub name: String,
-    pub params: Vec<Type>,
+    pub field_types: Vec<Type>,
 }
 
 #[derive(Debug)]
@@ -88,7 +97,7 @@ pub enum ToplevelKind {
     },
     Type {
         type_vars: BTreeSet<TypeVar>,
-        constructors: Vec<TypeConstructor>,
+        variants: Vec<TypeVariant>,
     },
 }
 

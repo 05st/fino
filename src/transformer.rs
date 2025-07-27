@@ -54,8 +54,8 @@ impl<'a> Transformer<'a> {
                 }
             }
 
-            // Type constructor shouldn't refer to any free variables
-            ast::ExprKind::TypeConstr { .. } => (),
+            // Type variant shouldn't refer to any free variables
+            ast::ExprKind::Variant { .. } => (),
 
             ast::ExprKind::App { fun, arg } => {
                 self.collect_free_vars(fun, scope.clone(), free_vars);
@@ -98,6 +98,8 @@ impl<'a> Transformer<'a> {
                 self.collect_free_vars(texpr, scope.clone(), free_vars);
                 self.collect_free_vars(fexpr, scope, free_vars);
             }
+
+            ast::ExprKind::Match { mexpr, branches } => todo!(),
         }
     }
 
@@ -122,17 +124,17 @@ impl<'a> Transformer<'a> {
                 }
             }
 
-            ast::ExprKind::TypeConstr {
+            ast::ExprKind::Variant {
                 type_name: _,
-                constr_name,
+                variant_name,
                 type_definition_id,
             } => {
                 let type_definition_id = type_definition_id.as_ref().unwrap();
-                let full_mangled_name =
-                    self.get_mangled_name(type_definition_id) + "_" + constr_name;
+                let variant_mangled_name =
+                    self.get_mangled_name(type_definition_id) + "_" + variant_name;
 
                 mir::Expr::Closure {
-                    fun_name: full_mangled_name,
+                    fun_name: variant_mangled_name,
                     env: Vec::new(),
                 }
             }
@@ -198,6 +200,8 @@ impl<'a> Transformer<'a> {
                 texpr: Box::new(self.transform_expr(texpr)),
                 fexpr: Box::new(self.transform_expr(fexpr)),
             },
+
+            ast::ExprKind::Match { mexpr, branches } => todo!(),
         }
     }
 
@@ -263,17 +267,17 @@ impl<'a> Transformer<'a> {
 
                 ast::ToplevelKind::Type {
                     type_vars: _,
-                    constructors,
+                    variants,
                 } => {
                     let type_definition_id = toplevel.definition_id.as_ref().unwrap();
 
-                    for (i, constr) in constructors.iter().enumerate() {
-                        let full_mangled_name =
-                            self.get_mangled_name(type_definition_id) + "_" + &constr.name;
+                    for (i, variant) in variants.iter().enumerate() {
+                        let variant_mangled_name =
+                            self.get_mangled_name(type_definition_id) + "_" + &variant.name;
 
-                        let global = if constr.params.is_empty() {
+                        let global = if variant.field_types.is_empty() {
                             mir::Toplevel::Variable {
-                                name: full_mangled_name,
+                                name: variant_mangled_name,
                                 body: mir::Expr::TypeInst {
                                     tag: i as i64,
                                     params: Vec::new(),
@@ -281,15 +285,15 @@ impl<'a> Transformer<'a> {
                                 is_main: false,
                             }
                         } else {
-                            let num_params = constr.params.len();
+                            let num_fields = variant.field_types.len();
                             let param_names = repeat_with(|| self.new_misc_name("param"))
-                                .take(num_params)
+                                .take(num_fields)
                                 .collect::<Vec<_>>();
 
                             let body = param_names
                                 .iter()
                                 .rev()
-                                .take(num_params - 1)
+                                .take(num_fields - 1)
                                 .enumerate()
                                 .fold(
                                     mir::Expr::TypeInst {
@@ -297,10 +301,10 @@ impl<'a> Transformer<'a> {
                                         params: param_names.clone(),
                                     },
                                     |child, (pi, param_name)| {
-                                        let fun_name = self.new_misc_name("typeconstr");
+                                        let fun_name = self.new_misc_name("variant");
                                         let env = param_names
                                             .iter()
-                                            .take(num_params - pi - 1)
+                                            .take(num_fields - pi - 1)
                                             .cloned()
                                             .collect::<Vec<_>>();
                                         self.globals.push(mir::Toplevel::Function {
@@ -314,7 +318,7 @@ impl<'a> Transformer<'a> {
                                 );
 
                             mir::Toplevel::Function {
-                                name: full_mangled_name,
+                                name: variant_mangled_name,
                                 env: Vec::new(),
                                 param: param_names[0].clone(),
                                 body,

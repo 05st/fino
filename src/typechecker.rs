@@ -80,23 +80,23 @@ impl<'a> TypeChecker<'a> {
                 (Vec::new(), var_type)
             }
 
-            ExprKind::TypeConstr {
+            ExprKind::Variant {
                 type_name: _,
-                constr_name,
+                variant_name,
                 type_definition_id,
             } => {
-                // how can we avoid these clones?
-                let constr_scheme = &self.type_constrs[&(
+                // How can we avoid these clones?
+                let variant_scheme = &self.type_constrs[&(
                     type_definition_id.as_ref().unwrap().clone(),
-                    constr_name.clone(),
+                    variant_name.clone(),
                 )]
                     .clone();
-                let subst = constr_scheme
+                let subst = variant_scheme
                     .0
                     .iter()
                     .map(|tvar| (Type::Var(tvar.clone()), Type::UniVar(self.fresh_uni_var())))
                     .collect::<HashMap<_, _>>();
-                (Vec::new(), constr_scheme.1.substitute(&subst))
+                (Vec::new(), variant_scheme.1.substitute(&subst))
             }
 
             ExprKind::Lam {
@@ -178,6 +178,8 @@ impl<'a> TypeChecker<'a> {
                     branch_type,
                 )
             }
+
+            ExprKind::Match { mexpr, branches } => todo!(),
         };
 
         (constraints, expr_type)
@@ -344,12 +346,12 @@ impl<'a> TypeChecker<'a> {
                         .insert(toplevel.definition_id.clone().unwrap(), type_scheme.clone());
                 }
 
-                // Setup type schemes for type_constrs
+                // Setup type schemes for type variants
                 ToplevelKind::Type {
                     type_vars,
-                    constructors,
+                    variants,
                 } => {
-                    for constr in constructors {
+                    for variant in variants {
                         let result_type = type_vars.iter().fold(
                             Type::Const {
                                 // Maybe we should use the qualified name instead?
@@ -360,13 +362,16 @@ impl<'a> TypeChecker<'a> {
                             |child, tv| Type::App(Box::new(child), Box::new(Type::Var(tv.clone()))),
                         );
 
-                        let constr_type =
-                            constr.params.iter().rev().fold(result_type, |child, t| {
+                        let variant_type = variant
+                            .field_types
+                            .iter()
+                            .rev()
+                            .fold(result_type, |child, t| {
                                 Type::Fun(Box::new(t.clone()), Box::new(child))
                             });
 
                         let mut extracted_type_vars = BTreeSet::new();
-                        constr_type.extract_type_vars(&mut extracted_type_vars);
+                        variant_type.extract_type_vars(&mut extracted_type_vars);
 
                         // Ensure all type variables were closed over
                         for type_var in extracted_type_vars.iter() {
@@ -380,8 +385,11 @@ impl<'a> TypeChecker<'a> {
                         }
 
                         self.type_constrs.insert(
-                            (toplevel.definition_id.clone().unwrap(), constr.name.clone()),
-                            TypeScheme(extracted_type_vars, constr_type),
+                            (
+                                toplevel.definition_id.clone().unwrap(),
+                                variant.name.clone(),
+                            ),
+                            TypeScheme(extracted_type_vars, variant_type),
                         );
                     }
                 }
@@ -403,10 +411,7 @@ impl<'a> TypeChecker<'a> {
                     self.solve_constraints(constraints)?;
                 }
 
-                ToplevelKind::Type {
-                    type_vars: _,
-                    constructors: _,
-                } => {} // Shouldn't have to do anything (?)
+                ToplevelKind::Type { .. } => {} // Do nothing
             }
         }
 

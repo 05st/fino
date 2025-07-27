@@ -14,7 +14,7 @@ struct NameResolver<'a> {
     definition_count: usize,
     environment: Environment,
     module_path: Option<Vec<String>>,
-    type_constrs: HashMap<DefinitionId, HashSet<String>>,
+    type_variants: HashMap<DefinitionId, HashSet<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -146,7 +146,7 @@ impl<'a> NameResolver<'a> {
             definition_count: 0,
             environment: Environment::new(),
             module_path: None,
-            type_constrs: HashMap::new(),
+            type_variants: HashMap::new(),
         }
     }
 
@@ -237,9 +237,9 @@ impl<'a> NameResolver<'a> {
                 Ok(())
             }
 
-            ExprKind::TypeConstr {
+            ExprKind::Variant {
                 type_name,
-                constr_name,
+                variant_name,
                 type_definition_id,
             } => {
                 let definition_id = self.assert_definition_kind(
@@ -247,8 +247,8 @@ impl<'a> NameResolver<'a> {
                     DefinitionKind::Type,
                 )?;
 
-                if !self.type_constrs[&definition_id].contains(constr_name) {
-                    panic!("nonexistent type constructor")
+                if !self.type_variants[&definition_id].contains(variant_name) {
+                    panic!("nonexistent type variant")
                 }
 
                 *type_definition_id = Some(definition_id);
@@ -327,6 +327,8 @@ impl<'a> NameResolver<'a> {
                 self.resolve_expr(texpr)?;
                 self.resolve_expr(fexpr)
             }
+
+            ExprKind::Match { mexpr, branches } => todo!(),
         }
     }
 
@@ -393,21 +395,22 @@ impl<'a> NameResolver<'a> {
             );
             toplevel.definition_id = Some(definition_id.clone());
 
-            // Set up type constructor if it's a type definition
+            // Set up type variants if it's a type definition
             if let ToplevelKind::Type {
                 type_vars: _,
-                constructors,
+                variants,
             } = &toplevel.kind
             {
-                let mut constr_set = HashSet::new();
-                for constr in constructors {
-                    if constr_set.contains(&constr.name) {
-                        panic!("duplicate type constructor");
+                let mut variant_set = HashSet::new();
+                for variant in variants {
+                    if variant_set.contains(&variant.name) {
+                        panic!("duplicate type variant");
                     } else {
-                        constr_set.insert(constr.name.clone());
+                        variant_set.insert(variant.name.clone());
                     }
                 }
-                self.type_constrs.insert(definition_id.clone(), constr_set);
+                self.type_variants
+                    .insert(definition_id.clone(), variant_set);
             }
 
             self.environment.insert_toplevel(
@@ -478,11 +481,11 @@ impl<'a> NameResolver<'a> {
 
                 ToplevelKind::Type {
                     type_vars: _,
-                    constructors,
+                    variants,
                 } => {
-                    for constructor in constructors {
-                        for mut ty in &mut constructor.params {
-                            self.resolve_type(&mut ty)?;
+                    for variant in variants {
+                        for mut field_type in &mut variant.field_types {
+                            self.resolve_type(&mut field_type)?;
                         }
                     }
                 }

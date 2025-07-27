@@ -453,15 +453,15 @@ impl<'a> Parser<'a> {
                 Ok(expr)
             }
 
-            // Parse type constructor
+            // Parse variant
             // TODO: Allow qualified name for type
             Token::UpperIdentifier(ident) if *peeked == Token::ColonColon => {
                 self.next()?;
-                let (constr_name, _) = self.expect_upper_identifier()?;
+                let (variant_name, _) = self.expect_upper_identifier()?;
                 Ok(Expr {
-                    kind: ExprKind::TypeConstr {
+                    kind: ExprKind::Variant {
                         type_name: Name::Unqualified(ident),
-                        constr_name,
+                        variant_name,
                         type_definition_id: None,
                     },
                     location: self.make_location(span),
@@ -767,16 +767,16 @@ impl<'a> Parser<'a> {
         })
     }
 
-    // Parse type constructor for type definition
-    fn parse_type_constructor(&mut self) -> Result<TypeConstructor, Error> {
+    // Parse variant for type definition
+    fn parse_type_variant(&mut self) -> Result<TypeVariant, Error> {
         let (name, _) = self.expect_upper_identifier()?;
-        let params = self
+        let field_types = self
             .parse_type_app_args()?
             .into_iter()
             .map(|(t, _)| t)
             .collect();
 
-        Ok(TypeConstructor { name, params })
+        Ok(TypeVariant { name, field_types })
     }
 
     // Parse toplevel type definition
@@ -802,9 +802,9 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let mut constructors = Vec::new();
+        let mut variants = Vec::new();
         loop {
-            constructors.push(self.parse_type_constructor()?);
+            variants.push(self.parse_type_variant()?);
             if let Token::Bar = self.peek() {
                 self.next()?;
             } else {
@@ -815,7 +815,7 @@ impl<'a> Parser<'a> {
         Ok(Toplevel {
             kind: ToplevelKind::Type {
                 type_vars,
-                constructors,
+                variants,
             },
             name,
             location: self.make_location(span),
