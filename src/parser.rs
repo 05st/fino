@@ -375,29 +375,54 @@ impl<'a> Parser<'a> {
                     field_patterns.push(self.parse_pattern()?);
                 }
 
-                Ok(Pattern::Variant {
-                    type_name: Name::Unqualified(ident),
-                    variant_name,
-                    type_definition_id: None,
-                    field_patterns,
-                    location: self.make_location(span.start .. variant_span.end),
+                Ok(Pattern {
+                    kind: PatternKind::Variant {
+                        type_name: Name::Unqualified(ident),
+                        variant_name,
+                        type_definition_id: None,
+                        field_patterns,
+                    },
+                    location: self.make_location(span.start..variant_span.end),
                 })
             }
 
-            Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => Ok(Pattern::Var {
-                name: ident,
-                definition_id: None,
+            Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => Ok(Pattern {
+                kind: PatternKind::Var {
+                    name: ident,
+                    definition_id: None,
+                },
                 location: self.make_location(span),
             }),
 
-            Token::LitBool(b) => Ok(Pattern::Lit(Literal::Bool(b))),
-            Token::LitInteger(i) => Ok(Pattern::Lit(Literal::Int(i))),
-            Token::LitFloat(f) => Ok(Pattern::Lit(Literal::Float(f))),
-            Token::LitString(s) => Ok(Pattern::Lit(Literal::String(s.clone()))),
-            Token::LitChar(c) => Ok(Pattern::Lit(Literal::Char(c))),
-            Token::LitUnit => Ok(Pattern::Lit(Literal::Unit)),
+            Token::LitBool(b) => Ok(Pattern {
+                kind: PatternKind::Lit(Literal::Bool(b)),
+                location: self.make_location(span),
+            }),
+            Token::LitInteger(i) => Ok(Pattern {
+                kind: PatternKind::Lit(Literal::Int(i)),
+                location: self.make_location(span),
+            }),
+            Token::LitFloat(f) => Ok(Pattern {
+                kind: PatternKind::Lit(Literal::Float(f)),
+                location: self.make_location(span),
+            }),
+            Token::LitString(s) => Ok(Pattern {
+                kind: PatternKind::Lit(Literal::String(s.clone())),
+                location: self.make_location(span),
+            }),
+            Token::LitChar(c) => Ok(Pattern {
+                kind: PatternKind::Lit(Literal::Char(c)),
+                location: self.make_location(span),
+            }),
+            Token::LitUnit => Ok(Pattern {
+                kind: PatternKind::Lit(Literal::Unit),
+                location: self.make_location(span),
+            }),
 
-            Token::Underscore => Ok(Pattern::Wild),
+            Token::Underscore => Ok(Pattern {
+                kind: PatternKind::Wild,
+                location: self.make_location(span),
+            }),
 
             other => Err(self.make_error(
                 expected_one_of!(other, "identifier", "literal", "'('"),
@@ -509,7 +534,7 @@ impl<'a> Parser<'a> {
                         variant_name,
                         type_definition_id: None,
                     },
-                    location: self.make_location(span.start .. variant_span.end),
+                    location: self.make_location(span.start..variant_span.end),
                 })
             }
 

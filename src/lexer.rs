@@ -158,7 +158,7 @@ fn fixity_decl_callback(lexer: &mut Lexer<Token>) -> Filter<()> {
         "infr" => Precedence::Infix(prec * 2 + 1, prec * 2),
         "post" => Precedence::Postfix(prec * 2),
         // This should never happen, regex should not match other
-        other => panic!("Bad fixity {:?}", other),
+        _ => unreachable!(),
     };
 
     lexer

@@ -35,6 +35,84 @@ impl<'a> TypeChecker<'a> {
         self.unification_table.new_key(None)
     }
 
+    fn infer_lit(&self, literal: &Literal) -> Type {
+        match literal {
+            Literal::Int(_) => Type::int(),
+            Literal::Float(_) => Type::float(),
+            Literal::String(_) => Type::str(),
+            Literal::Char(_) => Type::char(),
+            Literal::Bool(_) => Type::bool(),
+            Literal::Unit => Type::unit(),
+        }
+    }
+
+    fn check_lit(
+        &mut self,
+        literal: &Literal,
+        location: Location,
+        expected_type: Type,
+    ) -> Vec<Constraint> {
+        let actual_type = self.infer_lit(literal);
+        if expected_type == actual_type {
+            Vec::new()
+        } else {
+            vec![Constraint::TypeEqual(expected_type, actual_type, location)]
+        }
+    }
+
+    fn infer_pattern(
+        &mut self,
+        env: im::HashMap<DefinitionId, Type>,
+        pattern: &Pattern,
+    ) -> (Vec<Constraint>, Type) {
+        match &pattern.kind {
+            PatternKind::Variant {
+                type_name,
+                variant_name,
+                type_definition_id,
+                field_patterns,
+            } => {
+                // get instantiated variant function type
+                // infer field patterns
+                // constrain field pattern types to variant function type args
+                // end function res type is type of pattern
+                todo!()
+            }
+
+            PatternKind::Var { .. } => (Vec::new(), Type::UniVar(self.fresh_uni_var())),
+
+            PatternKind::Lit(literal) => (Vec::new(), self.infer_lit(literal)),
+
+            PatternKind::Wild => (Vec::new(), Type::UniVar(self.fresh_uni_var())),
+        }
+    }
+
+    fn check_pattern(
+        &mut self,
+        env: im::HashMap<DefinitionId, Type>,
+        pattern: &Pattern,
+        expected_type: Type,
+    ) -> Vec<Constraint> {
+        match &pattern.kind {
+            PatternKind::Lit(literal) => {
+                self.check_lit(literal, pattern.location.clone(), expected_type)
+            }
+
+            PatternKind::Wild => Vec::new(),
+
+            _ => {
+                let (mut constraints, inferred_type) = self.infer_pattern(env, pattern);
+                constraints.push(Constraint::TypeEqual(
+                    expected_type,
+                    inferred_type,
+                    pattern.location.clone(),
+                ));
+
+                constraints
+            }
+        }
+    }
+
     // Infer (synthesize) expression type. Only one of infer_expr or check_expr
     // should ever be called on an expression
     fn infer_expr(
@@ -43,17 +121,7 @@ impl<'a> TypeChecker<'a> {
         expr: &Expr,
     ) -> (Vec<Constraint>, Type) {
         let (constraints, expr_type) = match &expr.kind {
-            ExprKind::Lit(literal) => (
-                Vec::new(),
-                match literal {
-                    Literal::Int(_) => Type::int(),
-                    Literal::Float(_) => Type::float(),
-                    Literal::String(_) => Type::str(),
-                    Literal::Char(_) => Type::char(),
-                    Literal::Bool(_) => Type::bool(),
-                    Literal::Unit => Type::unit(),
-                },
-            ),
+            ExprKind::Lit(literal) => (Vec::new(), self.infer_lit(literal)),
 
             ExprKind::Var {
                 name: _,
@@ -179,7 +247,38 @@ impl<'a> TypeChecker<'a> {
                 )
             }
 
-            ExprKind::Match { mexpr, branches } => todo!(),
+            ExprKind::Match { mexpr, branches } => {
+                let [head_branch, tail_branches @ ..] = branches.as_slice() else {
+                    unreachable!()
+                };
+
+                let (mut mexpr_constraints, mexpr_type) = self.infer_expr(env.clone(), &mexpr);
+                let (mut branch_constraints, branch_type) =
+                    self.infer_expr(env.clone(), &head_branch.1);
+
+                for branch in branches {
+                    mexpr_constraints.append(&mut self.check_pattern(
+                        env.clone(),
+                        &branch.0,
+                        mexpr_type.clone(),
+                    ));
+                }
+                for tail_branch in tail_branches {
+                    branch_constraints.append(&mut self.check_expr(
+                        env.clone(),
+                        &tail_branch.1,
+                        branch_type.clone(),
+                    ));
+                }
+
+                (
+                    mexpr_constraints
+                        .into_iter()
+                        .chain(branch_constraints)
+                        .collect(),
+                    branch_type,
+                )
+            }
         };
 
         (constraints, expr_type)
@@ -197,12 +296,7 @@ impl<'a> TypeChecker<'a> {
         expected_type: Type,
     ) -> Vec<Constraint> {
         match (&expr.kind, expected_type) {
-            (ExprKind::Lit(Literal::Int(_)), t) if t == Type::int() => Vec::new(),
-            (ExprKind::Lit(Literal::Float(_)), t) if t == Type::float() => Vec::new(),
-            (ExprKind::Lit(Literal::String(_)), t) if t == Type::str() => Vec::new(),
-            (ExprKind::Lit(Literal::Char(_)), t) if t == Type::char() => Vec::new(),
-            (ExprKind::Lit(Literal::Bool(_)), t) if t == Type::bool() => Vec::new(),
-            (ExprKind::Lit(Literal::Unit), t) if t == Type::unit() => Vec::new(),
+            (ExprKind::Lit(literal), t) => self.check_lit(literal, expr.location.clone(), t),
 
             (
                 ExprKind::Lam {

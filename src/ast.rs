@@ -26,21 +26,25 @@ impl Name {
 }
 
 #[derive(Debug)]
-pub enum Pattern {
+pub enum PatternKind {
     Variant {
         type_name: Name,
         variant_name: String,
         type_definition_id: Option<DefinitionId>,
         field_patterns: Vec<Pattern>,
-        location: Location,
     },
     Var {
         name: String,
         definition_id: Option<DefinitionId>,
-        location: Location,
     },
     Lit(Literal),
     Wild,
+}
+
+#[derive(Debug)]
+pub struct Pattern {
+    pub kind: PatternKind,
+    pub location: Location,
 }
 
 #[derive(Debug)]

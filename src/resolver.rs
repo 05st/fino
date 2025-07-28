@@ -64,13 +64,17 @@ impl Environment {
     fn push_scope(&mut self, name: String, definition_id: DefinitionId) {
         match self.scopes.back() {
             Some(previous) => self.scopes.push_back(previous.update(name, definition_id)),
-            None => self.scopes.push_back(im::HashMap::unit(name, definition_id)),
+            None => self
+                .scopes
+                .push_back(im::HashMap::unit(name, definition_id)),
         }
     }
 
     fn push_scope_many(&mut self, entries: Vec<(String, DefinitionId)>) {
         match self.scopes.back() {
-            Some(previous) => self.scopes.push_back(im::HashMap::from(entries).union(previous.clone())),
+            Some(previous) => self
+                .scopes
+                .push_back(im::HashMap::from(entries).union(previous.clone())),
             None => self.scopes.push_back(im::HashMap::from(entries)),
         }
     }
@@ -224,12 +228,21 @@ impl<'a> NameResolver<'a> {
             }
         }
     }
-    
-    fn resolve_pattern(&mut self, pat: &mut Pattern, defs: &mut Vec<(String, DefinitionId)>) -> Result<(), Error> {
-        match pat {
-            Pattern::Variant { type_name, variant_name, type_definition_id, field_patterns, location } => {
+
+    fn resolve_pattern(
+        &mut self,
+        pat: &mut Pattern,
+        defs: &mut Vec<(String, DefinitionId)>,
+    ) -> Result<(), Error> {
+        match &mut pat.kind {
+            PatternKind::Variant {
+                type_name,
+                variant_name,
+                type_definition_id,
+                field_patterns,
+            } => {
                 let definition_id = self.assert_definition_kind(
-                    self.environment.lookup_name(type_name, location)?,
+                    self.environment.lookup_name(type_name, &pat.location)?,
                     DefinitionKind::Type,
                 )?;
 
@@ -246,11 +259,14 @@ impl<'a> NameResolver<'a> {
                 Ok(())
             }
 
-            Pattern::Var { name, definition_id, location } => {
+            PatternKind::Var {
+                name,
+                definition_id,
+            } => {
                 let new_definition_id = self.new_definition(
                     name.clone(),
                     DefinitionKind::Let,
-                    location.clone(),
+                    pat.location.clone(),
                     true,
                 );
 
@@ -260,8 +276,8 @@ impl<'a> NameResolver<'a> {
                 Ok(())
             }
 
-            Pattern::Lit(_) => Ok(()),
-            Pattern::Wild => Ok(()),
+            PatternKind::Lit(_) => Ok(()),
+            PatternKind::Wild => Ok(()),
         }
     }
 
