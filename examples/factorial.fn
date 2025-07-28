@@ -3,7 +3,7 @@ import stl.prelude
 export factorial
 
 fn factorial : int -> int
-    n = if n > 0 then
+;   n = if n > 0 then
             n * factorial (n - 1)
         else
             1

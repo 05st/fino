@@ -3,8 +3,8 @@ export (||)
 
 infl && 11
 fn (&&) : bool -> bool -> bool
-    a b = extern #_fino_bool_and(a, b) : bool
+;   a b = extern #_fino_bool_and(a, b) : bool
 
 infl || 10
 fn (||) : bool -> bool -> bool
-    a b = extern #_fino_bool_or(a, b) : bool
+;   a b = extern #_fino_bool_or(a, b) : bool

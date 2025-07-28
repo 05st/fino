@@ -29,8 +29,6 @@ struct Parser<'a> {
     previous: Option<(Token, Span)>,
     filepath: PathBuf,
     parsed_main: bool,
-    line_start: usize,
-    block_stack: Vec<usize>,
 }
 
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
@@ -49,8 +47,6 @@ impl<'a> Parser<'a> {
             previous: None,
             filepath: PathBuf::new(),
             parsed_main: false,
-            line_start: 0,
-            block_stack: Vec::new(),
         }
     }
 
@@ -102,32 +98,18 @@ impl<'a> Parser<'a> {
             .map(|t| t.1.clone())
             .unwrap_or(self.make_eof_span())
     }
+
     // Skip zero or more newlines
     fn skip_newlines(&mut self) {
         while let Token::Newline = self.peek() {
-            let (_, span) = self.pop();
-            self.line_start = span.end;
+            self.pop();
         }
-    }
-
-    // Advance token stream and return popped (token, span)
-    fn next_with_span_keep_newlines(&mut self) -> Result<(Token, Span), Error> {
-        let result = self.pop();
-
-        // Ensure column position meets current block threshold
-        let column = result.1.start - self.line_start;
-        let thresh = *self.block_stack.first().unwrap_or(&0);
-        if column < thresh {
-            return self.error(ErrorKind::InvalidIndentation(column, thresh), result.1);
-        }
-
-        Ok(result)
     }
 
     // Advance token stream and skip surrounding newlines
     fn next_with_span(&mut self) -> Result<(Token, Span), Error> {
         self.skip_newlines();
-        let result = self.next_with_span_keep_newlines()?;
+        let result = self.pop();
         self.skip_newlines();
 
         Ok(result)
@@ -138,30 +120,7 @@ impl<'a> Parser<'a> {
         Ok(self.next_with_span()?.0)
     }
 
-    // Begins a new indented block, with indentation level of the current token,
-    // which must be greater than of the previous block
-    fn begin_block(&mut self) -> Result<(), Error> {
-        self.skip_newlines();
-
-        let span = self.span();
-
-        let column = span.start - self.line_start;
-        let prev_col = *self.block_stack.first().unwrap_or(&0);
-        if column <= prev_col {
-            return self.error(ErrorKind::InvalidIndentation(column, prev_col), span);
-        }
-
-        self.block_stack.push(column);
-
-        Ok(())
-    }
-
-    // Pops the current block
-    fn end_block(&mut self) {
-        self.block_stack.pop();
-    }
-
-    // Consume specific token
+    // Consume specific token and skip newlines
     fn expect(&mut self, expected: Token) -> Result<Span, Error> {
         let (current, span) = self.next_with_span()?;
 
@@ -234,7 +193,7 @@ impl<'a> Parser<'a> {
 
     // Parse type atom
     fn parse_type_atom(&mut self) -> Result<Type, Error> {
-        let (token, span) = self.next_with_span_keep_newlines()?;
+        let (token, span) = self.next_with_span()?;
         match token {
             Token::LeftParen => {
                 let res = self.parse_type()?;
@@ -370,7 +329,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    // Parse if expression
     fn parse_if_expr(&mut self) -> Result<Expr, Error> {
         let if_span = self.expect(Token::KwIf)?;
         let cond = self.parse_expr()?;
@@ -388,6 +346,91 @@ impl<'a> Parser<'a> {
                 fexpr: Box::new(fexpr),
             },
             location: self.make_location(if_span),
+        })
+    }
+
+    fn could_be_pattern(token: &Token) -> bool {
+        match token {
+            Token::Underscore => true,
+            _ => Parser::could_be_atom(token),
+        }
+    }
+
+    fn parse_pattern(&mut self) -> Result<Pattern, Error> {
+        let (token, span) = self.next_with_span()?;
+        let peeked = self.peek();
+        match token {
+            Token::LeftParen => {
+                let pattern = self.parse_pattern()?;
+                self.expect(Token::RightParen)?;
+                Ok(pattern)
+            }
+
+            Token::UpperIdentifier(ident) if *peeked == Token::ColonColon => {
+                self.next()?;
+                let (variant_name, _) = self.expect_upper_identifier()?;
+
+                let mut field_patterns = Vec::new();
+                while Parser::could_be_pattern(self.peek()) {
+                    field_patterns.push(self.parse_pattern()?);
+                }
+
+                Ok(Pattern::Variant {
+                    type_name: Name::Unqualified(ident),
+                    variant_name,
+                    type_definition_id: None,
+                    field_patterns,
+                })
+            }
+
+            Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => Ok(Pattern::Var {
+                name: Name::Unqualified(ident),
+                definition_id: None,
+            }),
+
+            Token::LitBool(b) => Ok(Pattern::Lit(Literal::Bool(b))),
+            Token::LitInteger(i) => Ok(Pattern::Lit(Literal::Int(i))),
+            Token::LitFloat(f) => Ok(Pattern::Lit(Literal::Float(f))),
+            Token::LitString(s) => Ok(Pattern::Lit(Literal::String(s.clone()))),
+            Token::LitChar(c) => Ok(Pattern::Lit(Literal::Char(c))),
+            Token::LitUnit => Ok(Pattern::Lit(Literal::Unit)),
+
+            Token::Underscore => Ok(Pattern::Wild),
+
+            other => Err(self.make_error(
+                expected_one_of!(other, "identifier", "literal", "'('"),
+                span,
+            )),
+        }
+    }
+
+    fn parse_match_expr(&mut self) -> Result<Expr, Error> {
+        let match_span = self.expect(Token::KwMatch)?;
+        let mexpr = self.parse_expr()?;
+
+        let mut branches = Vec::new();
+        loop {
+            let (token, span) = self.next_with_span()?;
+            if token != Token::Colon && token != Token::Semicolon {
+                return Err(self.make_error(expected_one_of!(token, "':', ';'"), span));
+            }
+
+            let pattern = self.parse_pattern()?;
+            self.expect(Token::BigArrow)?;
+            let bexpr = self.parse_expr()?;
+            branches.push((pattern, bexpr));
+
+            if token == Token::Semicolon {
+                break;
+            }
+        }
+
+        Ok(Expr {
+            kind: ExprKind::Match {
+                mexpr: Box::new(mexpr),
+                branches,
+            },
+            location: self.make_location(match_span),
         })
     }
 
@@ -425,7 +468,7 @@ impl<'a> Parser<'a> {
     }
 
     // Based on the token, determines if it could be the start of an atom
-    // Used by parse_app()
+    // Used by parse_app() and could_be_pattern()
     fn could_be_atom(token: &Token) -> bool {
         match token {
             Token::LeftParen
@@ -532,7 +575,7 @@ impl<'a> Parser<'a> {
             }),
 
             other => Err(self.make_error(
-                expected_one_of!(other.clone(), "identifier", "literal", "'('"),
+                expected_one_of!(other, "identifier", "literal", "'('"),
                 span,
             )),
         }
@@ -666,6 +709,7 @@ impl<'a> Parser<'a> {
             Token::KwExtern => self.parse_extern_expr(),
             Token::KwLet => self.parse_let_expr(),
             Token::KwIf => self.parse_if_expr(),
+            Token::KwMatch => self.parse_match_expr(),
             Token::Backslash => self.parse_lam_expr(),
             _ => self.parse_oper_expr(0),
         }
@@ -679,10 +723,10 @@ impl<'a> Parser<'a> {
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
 
-        self.begin_block()?;
-
         // TODO:
         // Parse and desugar multiple pattern matching branches
+
+        self.expect(Token::Semicolon)?;
 
         let mut params = Vec::new();
         loop {
@@ -704,8 +748,6 @@ impl<'a> Parser<'a> {
         }
 
         let body = self.parse_expr()?;
-
-        self.end_block();
 
         // Desugar function into definition with curried lambdas
         let expr = params
@@ -864,7 +906,6 @@ impl<'a> Parser<'a> {
         filepath: PathBuf,
     ) -> Result<(), Error> {
         self.tokens = VecDeque::from(tokens);
-        self.line_start = 0;
         self.filepath = filepath;
 
         let mut imports = Vec::new();

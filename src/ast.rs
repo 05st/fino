@@ -27,7 +27,18 @@ impl Name {
 
 #[derive(Debug)]
 pub enum Pattern {
+    Variant {
+        type_name: Name,
+        variant_name: String,
+        type_definition_id: Option<DefinitionId>,
+        field_patterns: Vec<Pattern>,
+    },
+    Var {
+        name: Name,
+        definition_id: Option<DefinitionId>,
+    },
     Lit(Literal),
+    Wild,
 }
 
 #[derive(Debug)]

@@ -87,6 +87,8 @@ pub enum Token {
     Bar,
     #[token(":")]
     Colon,
+    #[token(";")]
+    Semicolon,
     #[token("::")]
     ColonColon,
     #[token("\\")]
@@ -95,6 +97,8 @@ pub enum Token {
     SmallArrow,
     #[token("=>")]
     BigArrow,
+    #[regex("_")]
+    Underscore,
 
     // Used for indexing
     #[token(".")]
@@ -223,10 +227,12 @@ impl Display for Token {
             Token::Equal => write!(f, "'='"),
             Token::Bar => write!(f, "'|'"),
             Token::Colon => write!(f, "':'"),
+            Token::Semicolon => write!(f, "';'"),
             Token::ColonColon => write!(f, "'::'"),
             Token::Backslash => write!(f, "'\\'"),
             Token::SmallArrow => write!(f, "'->'"),
             Token::BigArrow => write!(f, "'=>'"),
+            Token::Underscore => write!(f, "'_'"),
             Token::Dot => write!(f, "'.'"),
             Token::SpacedDot => write!(f, "' .'"),
             Token::FixityDecl => write!(f, "fixity declaration"),

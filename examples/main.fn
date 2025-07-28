@@ -4,14 +4,18 @@ import stl.prelude
 
 type List a = Nil | Cons a (List a)
 
-// fn map : (a -> b) -> (List a) -> (List b)
-//     f l = List::Nil
+fn map : (a -> b) -> (List a) -> (List b)
+;   f l =
+        match l
+        :   3 => 12
+        :   List::Cons 12 List::Nil => 4
+        ;   4 => 12
 
 // let main : unit = mandelbrot >> println_str "What is your name?" >> println_str ("Hello, " ++ readline ++ "!")
 // let main : unit = println_int (factorial 7)
 
 fn f : a -> a
-    x = x
+;   x = x
 let main : unit = f 12 >> println_str (f "test") >> (List::Cons 12 List::Nil) >> three >> two >> f ()
 
 type Nat = Zero | Succ Nat
