@@ -368,7 +368,7 @@ impl<'a> Parser<'a> {
 
             Token::UpperIdentifier(ident) if *peeked == Token::ColonColon => {
                 self.next()?;
-                let (variant_name, _) = self.expect_upper_identifier()?;
+                let (variant_name, variant_span) = self.expect_upper_identifier()?;
 
                 let mut field_patterns = Vec::new();
                 while Parser::could_be_pattern(self.peek()) {
@@ -380,12 +380,14 @@ impl<'a> Parser<'a> {
                     variant_name,
                     type_definition_id: None,
                     field_patterns,
+                    location: self.make_location(span.start .. variant_span.end),
                 })
             }
 
             Token::UpperIdentifier(ident) | Token::LowerIdentifier(ident) => Ok(Pattern::Var {
-                name: Name::Unqualified(ident),
+                name: ident,
                 definition_id: None,
+                location: self.make_location(span),
             }),
 
             Token::LitBool(b) => Ok(Pattern::Lit(Literal::Bool(b))),
@@ -500,14 +502,14 @@ impl<'a> Parser<'a> {
             // TODO: Allow qualified name for type
             Token::UpperIdentifier(ident) if *peeked == Token::ColonColon => {
                 self.next()?;
-                let (variant_name, _) = self.expect_upper_identifier()?;
+                let (variant_name, variant_span) = self.expect_upper_identifier()?;
                 Ok(Expr {
                     kind: ExprKind::Variant {
                         type_name: Name::Unqualified(ident),
                         variant_name,
                         type_definition_id: None,
                     },
-                    location: self.make_location(span),
+                    location: self.make_location(span.start .. variant_span.end),
                 })
             }
 

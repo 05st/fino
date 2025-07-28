@@ -64,11 +64,14 @@ impl Environment {
     fn push_scope(&mut self, name: String, definition_id: DefinitionId) {
         match self.scopes.back() {
             Some(previous) => self.scopes.push_back(previous.update(name, definition_id)),
-            None => {
-                let mut top_scope = im::HashMap::new();
-                top_scope.insert(name, definition_id);
-                self.scopes.push_back(top_scope);
-            }
+            None => self.scopes.push_back(im::HashMap::unit(name, definition_id)),
+        }
+    }
+
+    fn push_scope_many(&mut self, entries: Vec<(String, DefinitionId)>) {
+        match self.scopes.back() {
+            Some(previous) => self.scopes.push_back(im::HashMap::from(entries).union(previous.clone())),
+            None => self.scopes.push_back(im::HashMap::from(entries)),
         }
     }
 
@@ -221,6 +224,46 @@ impl<'a> NameResolver<'a> {
             }
         }
     }
+    
+    fn resolve_pattern(&mut self, pat: &mut Pattern, defs: &mut Vec<(String, DefinitionId)>) -> Result<(), Error> {
+        match pat {
+            Pattern::Variant { type_name, variant_name, type_definition_id, field_patterns, location } => {
+                let definition_id = self.assert_definition_kind(
+                    self.environment.lookup_name(type_name, location)?,
+                    DefinitionKind::Type,
+                )?;
+
+                if !self.type_variants[&definition_id].contains(variant_name) {
+                    panic!("nonexistent type variant")
+                }
+
+                *type_definition_id = Some(definition_id);
+
+                for field_pattern in field_patterns {
+                    self.resolve_pattern(field_pattern, defs)?;
+                }
+
+                Ok(())
+            }
+
+            Pattern::Var { name, definition_id, location } => {
+                let new_definition_id = self.new_definition(
+                    name.clone(),
+                    DefinitionKind::Let,
+                    location.clone(),
+                    true,
+                );
+
+                *definition_id = Some(new_definition_id.clone());
+                defs.push((name.clone(), new_definition_id));
+
+                Ok(())
+            }
+
+            Pattern::Lit(_) => Ok(()),
+            Pattern::Wild => Ok(()),
+        }
+    }
 
     fn resolve_expr(&mut self, expr: &mut Expr) -> Result<(), Error> {
         match &mut expr.kind {
@@ -255,10 +298,7 @@ impl<'a> NameResolver<'a> {
                 Ok(())
             }
 
-            ExprKind::App {
-                ref mut fun,
-                ref mut arg,
-            } => {
+            ExprKind::App { fun, arg } => {
                 self.resolve_expr(fun)?;
                 self.resolve_expr(arg)
             }
@@ -276,7 +316,7 @@ impl<'a> NameResolver<'a> {
 
             ExprKind::Lam {
                 param_name,
-                ref mut body,
+                body,
                 param_definition_id,
             } => {
                 let new_definition_id = self.new_definition(
@@ -297,8 +337,8 @@ impl<'a> NameResolver<'a> {
 
             ExprKind::Let {
                 name,
-                ref mut aexpr,
-                ref mut body,
+                aexpr,
+                body,
                 definition_id,
             } => {
                 self.resolve_expr(aexpr)?;
@@ -318,17 +358,25 @@ impl<'a> NameResolver<'a> {
                 Ok(())
             }
 
-            ExprKind::If {
-                cond,
-                ref mut texpr,
-                ref mut fexpr,
-            } => {
+            ExprKind::If { cond, texpr, fexpr } => {
                 self.resolve_expr(cond)?;
                 self.resolve_expr(texpr)?;
                 self.resolve_expr(fexpr)
             }
 
-            ExprKind::Match { mexpr, branches } => todo!(),
+            ExprKind::Match { mexpr, branches } => {
+                self.resolve_expr(mexpr)?;
+
+                for branch in branches {
+                    let mut new_defs = Vec::new();
+                    self.resolve_pattern(&mut branch.0, &mut new_defs)?;
+                    self.environment.push_scope_many(new_defs);
+                    self.resolve_expr(&mut branch.1)?;
+                    self.environment.pop_scope();
+                }
+
+                Ok(())
+            }
         }
     }
 
@@ -447,7 +495,7 @@ impl<'a> NameResolver<'a> {
                 Export::Toplevel {
                     name,
                     location,
-                    ref mut definition_id,
+                    definition_id,
                 } => {
                     *definition_id =
                         Some(self.environment.lookup_unqualified_name(name, location)?);
@@ -472,7 +520,7 @@ impl<'a> NameResolver<'a> {
             match &mut toplevel.kind {
                 ToplevelKind::Let {
                     type_scheme,
-                    ref mut expr,
+                    expr,
                     is_main: _,
                 } => {
                     self.resolve_type(&mut type_scheme.1)?;

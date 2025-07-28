@@ -32,10 +32,12 @@ pub enum Pattern {
         variant_name: String,
         type_definition_id: Option<DefinitionId>,
         field_patterns: Vec<Pattern>,
+        location: Location,
     },
     Var {
-        name: Name,
+        name: String,
         definition_id: Option<DefinitionId>,
+        location: Location,
     },
     Lit(Literal),
     Wild,

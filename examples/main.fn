@@ -9,6 +9,7 @@ fn map : (a -> b) -> (List a) -> (List b)
         match l
         :   3 => 12
         :   List::Cons 12 List::Nil => 4
+        :   x => x
         ;   4 => 12
 
 // let main : unit = mandelbrot >> println_str "What is your name?" >> println_str ("Hello, " ++ readline ++ "!")
