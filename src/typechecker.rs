@@ -35,6 +35,22 @@ impl<'a> TypeChecker<'a> {
         self.unification_table.new_key(None)
     }
 
+    fn get_variant_type(
+        &mut self,
+        variant_name: &String,
+        type_definition_id: &DefinitionId,
+    ) -> Type {
+        // Can we avoid these clones?
+        let variant_scheme =
+            self.type_constrs[&(type_definition_id.clone(), variant_name.clone())].clone();
+        let subst = variant_scheme
+            .0
+            .iter()
+            .map(|tvar| (Type::Var(tvar.clone()), Type::UniVar(self.fresh_uni_var())))
+            .collect::<HashMap<_, _>>();
+        variant_scheme.1.substitute(&subst)
+    }
+
     fn infer_lit(&self, literal: &Literal) -> Type {
         match literal {
             Literal::Int(_) => Type::int(),
@@ -64,22 +80,54 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         env: im::HashMap<DefinitionId, Type>,
         pattern: &Pattern,
+        new_defs: &mut Vec<(DefinitionId, Type)>,
     ) -> (Vec<Constraint>, Type) {
         match &pattern.kind {
             PatternKind::Variant {
-                type_name,
+                type_name: _,
                 variant_name,
                 type_definition_id,
                 field_patterns,
             } => {
-                // get instantiated variant function type
-                // infer field patterns
-                // constrain field pattern types to variant function type args
-                // end function res type is type of pattern
-                todo!()
+                // Get instantiated variant function type
+                let variant_type =
+                    self.get_variant_type(variant_name, type_definition_id.as_ref().unwrap());
+
+                // Infer field patterns
+                let mut constraints = Vec::new();
+                let mut field_pattern_types = Vec::new();
+                for field_pattern in field_patterns {
+                    let (mut constrs, fp_type) =
+                        self.infer_pattern(env.clone(), field_pattern, new_defs);
+                    constraints.append(&mut constrs);
+                    field_pattern_types.push((fp_type, field_pattern.location.clone()));
+                }
+
+                // Constrain field pattern types to variant function param types
+                let mut param_types = Vec::new();
+                let return_type = variant_type.flatten_fun_type(&mut param_types);
+                if param_types.len() != field_pattern_types.len() {
+                    panic!("invalid variant")
+                }
+                param_types
+                    .into_iter()
+                    .zip(field_pattern_types)
+                    .for_each(|(pt, (fpt, loc))| {
+                        constraints.push(Constraint::TypeEqual(pt, fpt, loc))
+                    });
+
+                // Result type of pattern is final variant function return type
+                (constraints, return_type)
             }
 
-            PatternKind::Var { .. } => (Vec::new(), Type::UniVar(self.fresh_uni_var())),
+            PatternKind::Var {
+                name: _,
+                definition_id,
+            } => {
+                let tvar = Type::UniVar(self.fresh_uni_var());
+                new_defs.push((definition_id.clone().unwrap(), tvar.clone()));
+                (Vec::new(), tvar)
+            }
 
             PatternKind::Lit(literal) => (Vec::new(), self.infer_lit(literal)),
 
@@ -92,6 +140,7 @@ impl<'a> TypeChecker<'a> {
         env: im::HashMap<DefinitionId, Type>,
         pattern: &Pattern,
         expected_type: Type,
+        new_defs: &mut Vec<(DefinitionId, Type)>,
     ) -> Vec<Constraint> {
         match &pattern.kind {
             PatternKind::Lit(literal) => {
@@ -101,7 +150,7 @@ impl<'a> TypeChecker<'a> {
             PatternKind::Wild => Vec::new(),
 
             _ => {
-                let (mut constraints, inferred_type) = self.infer_pattern(env, pattern);
+                let (mut constraints, inferred_type) = self.infer_pattern(env, pattern, new_defs);
                 constraints.push(Constraint::TypeEqual(
                     expected_type,
                     inferred_type,
@@ -152,20 +201,10 @@ impl<'a> TypeChecker<'a> {
                 type_name: _,
                 variant_name,
                 type_definition_id,
-            } => {
-                // How can we avoid these clones?
-                let variant_scheme = &self.type_constrs[&(
-                    type_definition_id.as_ref().unwrap().clone(),
-                    variant_name.clone(),
-                )]
-                    .clone();
-                let subst = variant_scheme
-                    .0
-                    .iter()
-                    .map(|tvar| (Type::Var(tvar.clone()), Type::UniVar(self.fresh_uni_var())))
-                    .collect::<HashMap<_, _>>();
-                (Vec::new(), variant_scheme.1.substitute(&subst))
-            }
+            } => (
+                Vec::new(),
+                self.get_variant_type(variant_name, type_definition_id.as_ref().unwrap()),
+            ),
 
             ExprKind::Lam {
                 param_name: _,
@@ -253,19 +292,24 @@ impl<'a> TypeChecker<'a> {
                 };
 
                 let (mut mexpr_constraints, mexpr_type) = self.infer_expr(env.clone(), &mexpr);
-                let (mut branch_constraints, branch_type) =
-                    self.infer_expr(env.clone(), &head_branch.1);
-
+                let mut new_defs = Vec::new();
                 for branch in branches {
                     mexpr_constraints.append(&mut self.check_pattern(
                         env.clone(),
                         &branch.0,
                         mexpr_type.clone(),
+                        &mut new_defs,
                     ));
                 }
+
+                // Due to name resolution, it doesn't matter if 'new_env' contains
+                // definitions for variables in the scopes of other branches
+                let new_env = im::HashMap::from(new_defs).union(env);
+                let (mut branch_constraints, branch_type) =
+                    self.infer_expr(new_env.clone(), &head_branch.1);
                 for tail_branch in tail_branches {
                     branch_constraints.append(&mut self.check_expr(
-                        env.clone(),
+                        new_env.clone(),
                         &tail_branch.1,
                         branch_type.clone(),
                     ));

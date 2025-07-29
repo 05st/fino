@@ -7,10 +7,8 @@ type List a = Nil | Cons a (List a)
 fn map : (a -> b) -> (List a) -> (List b)
 ;   f l =
         match l
-        :   3 => 12
-        :   List::Cons 12 List::Nil => 4
-        :   x => x
-        ;   4 => 12
+        :   List::Cons x List::Nil => 4
+        ;   _ => 2.3
 
 // let main : unit = mandelbrot >> println_str "What is your name?" >> println_str ("Hello, " ++ readline ++ "!")
 // let main : unit = println_int (factorial 7)

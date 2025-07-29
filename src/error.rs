@@ -28,8 +28,8 @@ pub enum ErrorKind {
     MultipleDefinitions(String), // Only possible when looking up unqualified name
     ExportedUnimportedModule(Vec<String>),
     AlreadyImportedModule(Vec<String>),
-    // AlreadyExportedDefinition(String),
-    // AlreadyExportedModule(Vec<String>),
+    AlreadyExportedDefinition(String),
+    AlreadyExportedModule(Vec<String>),
 
     // Type inference errors
     TypeMismatch(Type, Type),
@@ -101,8 +101,8 @@ impl Display for ErrorKind {
             AlreadyImportedModule(module_path) => {
                 write!(f, "Module {} was already imported", module_path.join("."))
             }
-            // AlreadyExportedDefinition(name) => write!(f, "{} was already exported", name),
-            // AlreadyExportedModule(module_path) => write!(f, "{} was already exported", module_path.join(".")),
+            AlreadyExportedDefinition(name) => write!(f, "{} was already exported", name),
+            AlreadyExportedModule(module_path) => write!(f, "Module {} was already exported", module_path.join(".")),
             TypeMismatch(type_a, type_b) => {
                 write!(f, "Type mismatch between {} and {} here", type_a, type_b)
             }

@@ -146,6 +146,15 @@ impl Type {
             ),
         }
     }
+
+    pub fn flatten_fun_type(&self, params: &mut Vec<Type>) -> Type {
+        if let Type::Fun(param, ret) = self {
+            params.push(*param.clone());
+            ret.flatten_fun_type(params)
+        } else {
+            self.clone()
+        }
+    }
 }
 
 impl Display for Type {

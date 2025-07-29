@@ -231,10 +231,10 @@ impl<'a> NameResolver<'a> {
 
     fn resolve_pattern(
         &mut self,
-        pat: &mut Pattern,
-        defs: &mut Vec<(String, DefinitionId)>,
+        pattern: &mut Pattern,
+        new_defs: &mut Vec<(String, DefinitionId)>,
     ) -> Result<(), Error> {
-        match &mut pat.kind {
+        match &mut pattern.kind {
             PatternKind::Variant {
                 type_name,
                 variant_name,
@@ -242,7 +242,7 @@ impl<'a> NameResolver<'a> {
                 field_patterns,
             } => {
                 let definition_id = self.assert_definition_kind(
-                    self.environment.lookup_name(type_name, &pat.location)?,
+                    self.environment.lookup_name(type_name, &pattern.location)?,
                     DefinitionKind::Type,
                 )?;
 
@@ -253,7 +253,7 @@ impl<'a> NameResolver<'a> {
                 *type_definition_id = Some(definition_id);
 
                 for field_pattern in field_patterns {
-                    self.resolve_pattern(field_pattern, defs)?;
+                    self.resolve_pattern(field_pattern, new_defs)?;
                 }
 
                 Ok(())
@@ -266,12 +266,12 @@ impl<'a> NameResolver<'a> {
                 let new_definition_id = self.new_definition(
                     name.clone(),
                     DefinitionKind::Let,
-                    pat.location.clone(),
+                    pattern.location.clone(),
                     true,
                 );
 
                 *definition_id = Some(new_definition_id.clone());
-                defs.push((name.clone(), new_definition_id));
+                new_defs.push((name.clone(), new_definition_id));
 
                 Ok(())
             }
@@ -506,6 +506,8 @@ impl<'a> NameResolver<'a> {
             }
         }
 
+        let mut exported_modules = HashSet::new();
+        let mut exported_definitions = HashSet::new();
         for export in module.exports.iter_mut() {
             match export {
                 Export::Toplevel {
@@ -513,19 +515,34 @@ impl<'a> NameResolver<'a> {
                     location,
                     definition_id,
                 } => {
-                    *definition_id =
-                        Some(self.environment.lookup_unqualified_name(name, location)?);
+                    let resolved_id = self.environment.lookup_unqualified_name(name, location)?;
+                    *definition_id = Some(resolved_id.clone());
+
+                    if !exported_definitions.insert(resolved_id) {
+                        return Err(Error::new(
+                            ErrorKind::AlreadyExportedDefinition(name.clone()),
+                            location.clone(),
+                        ));
+                    }
                 }
                 Export::Module {
                     module_path,
                     location,
                     module_id,
                 } => {
-                    // If the exported module is not in imported_modules, then it exists but isn't imported
-                    *module_id = Some(imported_modules.remove(module_path).ok_or(Error::new(
+                    // If the exported module is not in imported_modules, then it may exist but isn't imported
+                    let resolved_id = imported_modules.get(module_path).ok_or(Error::new(
                         ErrorKind::ExportedUnimportedModule(module_path.clone()),
                         location.clone(),
-                    ))?);
+                    ))?;
+                    *module_id = Some(resolved_id.clone());
+
+                    if !exported_modules.insert(resolved_id) {
+                        return Err(Error::new(
+                            ErrorKind::AlreadyExportedModule(module_path.clone()),
+                            location.clone(),
+                        ));
+                    }
                 }
             }
         }
