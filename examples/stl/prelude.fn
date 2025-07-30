@@ -2,14 +2,10 @@ import stl.io
 import stl.logical
 import stl.numerical
 import stl.string
+import stl.utility
 
 export module stl.io
 export module stl.logical
 export module stl.numerical
 export module stl.string
-
-export (>>)
-
-infl >> 20
-fn (>>) : a -> b -> b
-;   x y = y
+export module stl.utility

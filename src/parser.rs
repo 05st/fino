@@ -272,21 +272,26 @@ impl<'a> Parser<'a> {
         };
 
         // Parse comma separated args
-        self.expect(Token::LeftParen)?;
         let mut args = Vec::new();
-        loop {
-            if let Token::RightParen = self.peek() {
-                break;
+        if let Token::LitUnit = *self.peek() {
+            // Empty args '()' will be tokenized as unit literal
+            self.next()?;
+        } else {
+            self.expect(Token::LeftParen)?;
+            loop {
+                if let Token::RightParen = self.peek() {
+                    break;
+                }
+                let arg_expr = self.parse_expr()?;
+                args.push(arg_expr);
+                if let Token::RightParen = self.peek() {
+                    break;
+                } else {
+                    self.expect(Token::Comma)?;
+                }
             }
-            let arg_expr = self.parse_expr()?;
-            args.push(arg_expr);
-            if let Token::RightParen = self.peek() {
-                break;
-            } else {
-                self.expect(Token::Comma)?;
-            }
+            self.expect(Token::RightParen)?;
         }
-        self.expect(Token::RightParen)?;
 
         self.expect(Token::Colon)?;
         let prim_type = match self.parse_type_atom()? {

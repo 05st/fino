@@ -1,0 +1,5 @@
+export (>>)
+
+infl >> 20
+fn (>>) : a -> b -> b
+;   x y = y

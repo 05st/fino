@@ -2,23 +2,11 @@ import mandelbrot
 import factorial
 import stl.prelude
 
-type List a = Nil | Cons a (List a)
+let get_name : str =
+    print_str "What is your name?\nMy name is: " >> readline
 
-fn map : (a -> b) -> (List a) -> (List b)
-;   f l =
-        match l
-        :   List::Cons x List::Nil => 4
-        ;   _ => 2.3
-
-// let main : unit = mandelbrot >> println_str "What is your name?" >> println_str ("Hello, " ++ readline ++ "!")
-// let main : unit = println_int (factorial 7)
-
-fn f : a -> a
-;   x = x
-let main : unit = f 12 >> println_str (f "test") >> (List::Cons 12 List::Nil) >> three >> two >> f ()
-
-type Nat = Zero | Succ Nat
-
-let one : Nat = Nat::Succ Nat::Zero
-let two : Nat = Nat::Succ one
-let three : Nat = Nat::Succ (Nat::Succ (Nat::Succ Nat::Zero))
+let main : unit =
+    let name = get_name in
+    mandelbrot
+    >> println_int (10!)
+    >> println_str ("Hello, " ++ name ++ "!")

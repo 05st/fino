@@ -1,9 +1,13 @@
 import stl.prelude
 
 export factorial
+export (!)
 
 fn factorial : int -> int
 ;   n = if n > 0 then
             n * factorial (n - 1)
         else
             1
+
+post ! 20
+let (!) : int -> int = factorial

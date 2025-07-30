@@ -1,4 +1,5 @@
 import stl.string
+import stl.utility
 
 export print_str
 export println_str
@@ -12,18 +13,18 @@ fn print_str : str -> unit
 ;   s = extern #_fino_string_print(s) : unit
 
 fn println_str : str -> unit
-;   s = print_str (s ++ "\n")
+;   s = print_str s >> print_char '\n'
 
 fn print_char : char -> unit
 ;   c = extern #_fino_char_print(c) : unit
 
 fn println_char : char -> unit
-;   c = let a_ = print_char c in print_str "\n"
+;   c = print_char c >> print_char '\n'
 
 fn print_int : int -> unit
 ;   n = extern #_fino_int_print(n) : unit
 
 fn println_int : int -> unit
-;   n = let a_ = print_int n in print_str "\n"
+;   n = print_int n >> print_char '\n'
 
-let readline : str = extern #_fino_readline( ) : str
+let readline : str = extern #_fino_readline() : str
