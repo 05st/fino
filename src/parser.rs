@@ -10,6 +10,7 @@ use walkdir::DirEntry;
 use crate::{
     ast::*,
     cache::CompilerCache,
+    desugar::FnBranch,
     error::{Error, ErrorKind},
     lexer::{tokenize, Token},
     literal::Literal,
@@ -23,12 +24,13 @@ pub enum Precedence {
     Postfix(u8),
 }
 
-struct Parser<'a> {
+pub(crate) struct Parser<'a> {
     compiler_cache: &'a mut CompilerCache,
     tokens: VecDeque<(Token, Span)>,
     previous: Option<(Token, Span)>,
     filepath: PathBuf,
     parsed_main: bool,
+    match_name_count: usize,
 }
 
 // Utility macro to create ErrorKind::ExpectedOneOf errors from string literals
@@ -47,17 +49,25 @@ impl<'a> Parser<'a> {
             previous: None,
             filepath: PathBuf::new(),
             parsed_main: false,
+            match_name_count: 0,
         }
     }
 
     // Insert node id to location mapping into compiler cache
-    fn make_location(&self, span: Span) -> Location {
+    pub(crate) fn make_location(&self, span: Span) -> Location {
         Location::new(self.filepath.clone(), span)
     }
 
     fn make_error(&self, error: ErrorKind, span: Span) -> Error {
         Error::new(error, Location::new(self.filepath.clone(), span))
     }
+
+    pub(crate) fn new_match_name(&mut self, prefix: &str) -> String {
+        let name = format!("_{}_{}", prefix, self.match_name_count);
+        self.match_name_count += 1;
+        name
+    }
+
 
     fn error<T>(&self, error: ErrorKind, span: Span) -> Result<T, Error> {
         Err(self.make_error(error, span))
@@ -755,43 +765,63 @@ impl<'a> Parser<'a> {
         self.expect(Token::Colon)?;
         let type_scheme = self.parse_type_scheme()?;
 
-        // TODO:
-        // Parse and desugar multiple pattern matching branches
-
-        self.expect(Token::Semicolon)?;
-
-        let mut params = Vec::new();
+        let mut branches = Vec::new();
         loop {
             let (token, span) = self.next_with_span()?;
-            match token {
-                Token::UpperIdentifier(param) | Token::LowerIdentifier(param) => {
-                    params.push((param, span))
-                }
-                Token::Equal => {
-                    // Ensure at least one parameter was parsed
-                    if params.len() > 0 {
-                        break;
-                    } else {
-                        return self.error(expected_one_of!(token, "parameter"), span);
-                    }
-                }
-                other => return self.error(expected_one_of!(other, "parameter", "'='"), span),
+            if token != Token::Colon && token != Token::Semicolon {
+                return Err(self.make_error(expected_one_of!(token, "':'", "';'"), span));
+            }
+
+            let mut patterns = Vec::new();
+            while *self.peek() != Token::Equal {
+                patterns.push(self.parse_pattern()?);
+            }
+
+            if patterns.is_empty() {
+                return Err(self.make_error(
+                    expected_one_of!(Token::Equal, "pattern"),
+                    span,
+                ));
+            }
+
+            self.expect(Token::Equal)?;
+            let body = self.parse_expr()?;
+
+            branches.push(FnBranch { patterns, body });
+
+            if token == Token::Semicolon {
+                break;
             }
         }
 
-        let body = self.parse_expr()?;
+        let arity = branches[0].patterns.len();
+        for branch in &branches {
+            let found = branch.patterns.len();
+            if found != arity {
+                return Err(self.make_error(
+                    ErrorKind::ArityMismatch(arity, found),
+                    span.clone(),
+                ));
+            }
+        }
+
+        let param_names = (0..arity)
+            .map(|i| format!("_arg{}", i))
+            .collect::<Vec<_>>();
+
+        let body = self.build_match_tree(&param_names, branches, span.clone());
 
         // Desugar function into definition with curried lambdas
-        let expr = params
+        let expr = param_names
             .into_iter()
             .rev()
-            .fold(body, |child, (param_name, span)| Expr {
+            .fold(body, |child, param_name| Expr {
                 kind: ExprKind::Lam {
                     param_name,
                     body: Box::new(child),
                     param_definition_id: None,
                 },
-                location: self.make_location(span),
+                location: self.make_location(span.clone()),
             });
 
         Ok(Toplevel {

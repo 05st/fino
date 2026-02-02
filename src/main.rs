@@ -13,6 +13,7 @@ use walkdir::{DirEntry, WalkDir};
 
 mod ast;
 mod cache;
+mod desugar;
 mod error;
 mod lexer;
 mod literal;

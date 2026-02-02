@@ -23,7 +23,5 @@ let three : Nat = Nat::Succ (Nat::Succ (Nat::Succ Nat::Zero))
 type Maybe a = Just a | Nothing
 
 fn fmap : (a -> b) -> Maybe a -> Maybe b
-;   f m =
-        match m
-        :   Maybe::Nothing => Maybe::Nothing
-        ;   Maybe::Just x => Maybe::Just (f x)
+:   f Maybe::Nothing = Maybe::Nothing
+;   f (Maybe::Just x) = Maybe::Just (f x)

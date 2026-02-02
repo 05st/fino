@@ -17,6 +17,7 @@ pub enum ErrorKind {
     MultipleMainDefinitions,
     InvalidMainDefinitionType,
     DuplicateTypeVariable(TypeVar),
+    ArityMismatch(usize, usize),
 
     // Module sort errors
     CircularDependency,
@@ -86,6 +87,7 @@ impl Display for ErrorKind {
             MultipleMainDefinitions => write!(f, "Found multiple main definitions"),
             InvalidMainDefinitionType => write!(f, "Main definition must have a type of unit"),
             DuplicateTypeVariable(tvar) => write!(f, "Duplicate type variable {}", tvar),
+            ArityMismatch(expected, found) => write!(f, "Expected {} parameters, got {}", expected, found),
 
             CircularDependency => write!(f, "Modules have a circular dependency"),
             UnknownModule(module_path) => {

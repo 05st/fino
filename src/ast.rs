@@ -25,7 +25,7 @@ impl Name {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PatternKind {
     Variant {
         type_name: Name,
@@ -41,13 +41,13 @@ pub enum PatternKind {
     Wild,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Pattern {
     pub kind: PatternKind,
     pub location: Location,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ExprKind {
     Lit(Literal),
     // A variable / type constant name can be a qualified or unqualified name. A variable written as a
@@ -92,7 +92,7 @@ pub enum ExprKind {
     },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Expr {
     pub kind: ExprKind,
     pub location: Location,
