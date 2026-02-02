@@ -2,11 +2,28 @@ import mandelbrot
 import factorial
 import stl.prelude
 
+type List a = Cons a (List a) | Nil
+
 let get_name : str =
     print_str "What is your name?\nMy name is: " >> readline
 
 let main : unit =
     let name = get_name in
     mandelbrot
+    >> fmap (\x -> x + 1) (Maybe::Just 2)
     >> println_int (10!)
     >> println_str ("Hello, " ++ name ++ "!")
+
+let list_of_ints : List int = List::Cons 1 (List::Cons 2 (List::Cons 3 (List::Nil)))
+
+type Nat = Zero | Succ Nat
+
+let three : Nat = Nat::Succ (Nat::Succ (Nat::Succ Nat::Zero))
+
+type Maybe a = Just a | Nothing
+
+fn fmap : (a -> b) -> Maybe a -> Maybe b
+;   f m =
+        match m
+        :   Maybe::Nothing => Maybe::Nothing
+        ;   Maybe::Just x => Maybe::Just (f x)

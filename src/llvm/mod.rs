@@ -162,6 +162,21 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
                 .fn_type(&[self.context.i64_type().into()], false),
             None,
         );
+
+        for eq_name in [
+            "_fino_bool_eq",
+            "_fino_char_eq",
+            "_fino_int_eq",
+            "_fino_float_eq",
+            "_fino_string_eq",
+        ] {
+            self.module
+                .add_function(eq_name, self.ptr_fn_type(2), None);
+        }
+
+        self.module
+            .add_function("_fino_match_fail", self.ptr_fn_type(0), None);
+
     }
 
     fn finish(&mut self, path: &Path) {

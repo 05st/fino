@@ -2,6 +2,7 @@
 #include <gc.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define FINO_TYPE(inner_type, name)\
@@ -26,7 +27,9 @@
     }\
     fino_type* fino_type##_div(fino_type* a, fino_type* b) {\
         return fino_type##_new(a->value / b->value);\
-    }\
+    }
+
+#define FINO_ORDERED(fino_type)\
     _fino_bool* fino_type##_grt(fino_type* a, fino_type* b) {\
         return _fino_bool_new(a->value > b->value);\
     }\
@@ -38,6 +41,9 @@
     }\
     _fino_bool* fino_type##_leq(fino_type* a, fino_type* b) {\
         return _fino_bool_new(a->value <= b->value);\
+    }\
+    _fino_bool* fino_type##_eq(fino_type* a, fino_type* b) {\
+        return _fino_bool_new(a->value == b->value);\
     }
 
 #define FINO_PRINT(fino_type, format)\
@@ -49,12 +55,17 @@
 void* _fino_unit_val = NULL;
 
 FINO_TYPE(int8_t, _fino_bool);
-FINO_TYPE(int8_t, _fino_char);
+FINO_TYPE(uint8_t, _fino_char);
 FINO_TYPE(int64_t, _fino_int);
 FINO_TYPE(double, _fino_float);
 
 FINO_NUMERICAL(_fino_int);
 FINO_NUMERICAL(_fino_float);
+
+FINO_ORDERED(_fino_bool);
+FINO_ORDERED(_fino_char);
+FINO_ORDERED(_fino_int);
+FINO_ORDERED(_fino_float);
 
 FINO_PRINT(_fino_char, "%c");
 FINO_PRINT(_fino_int, "%lld");
@@ -102,6 +113,10 @@ _fino_string* _fino_string_concat(_fino_string* a, _fino_string* b) {
     return _fino_string_new(res_buf, res_len);
 }
 
+_fino_bool* _fino_string_eq(_fino_string* a, _fino_string* b) {
+    return _fino_bool_new((a->length == b->length) && (memcmp(a->buffer, b->buffer, a->length) == 0));
+}
+
 // User input
 _fino_string* _fino_readline() {
     char line[1024];
@@ -110,4 +125,10 @@ _fino_string* _fino_readline() {
     char* buffer = GC_malloc(len + 1);
     strcpy(buffer, line);
     return _fino_string_new(buffer, len);
+}
+
+// Misc
+void* _fino_match_fail() {
+    fprintf(stderr, "fino panic: non-exhaustive match\n");
+    abort();
 }

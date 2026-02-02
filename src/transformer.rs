@@ -1,4 +1,7 @@
-use std::{collections::HashSet, iter::repeat_with};
+use std::{
+    collections::{HashMap, HashSet},
+    iter::repeat_with,
+};
 
 use crate::{
     ast,
@@ -10,6 +13,7 @@ struct Transformer<'a> {
     compiler_cache: &'a mut CompilerCache,
     globals: Vec<mir::Toplevel>,
     functions: HashSet<DefinitionId>,
+    type_variant_tags: HashMap<DefinitionId, HashMap<String, i64>>,
     misc_name_count: usize,
 }
 
@@ -19,6 +23,7 @@ impl<'a> Transformer<'a> {
             compiler_cache,
             globals: Vec::new(),
             functions: HashSet::new(),
+            type_variant_tags: HashMap::new(),
             misc_name_count: 0,
         }
     }
@@ -99,7 +104,153 @@ impl<'a> Transformer<'a> {
                 self.collect_free_vars(fexpr, scope, free_vars);
             }
 
-            ast::ExprKind::Match { mexpr, branches } => todo!(),
+            ast::ExprKind::Match { mexpr, branches } => {
+                self.collect_free_vars(mexpr, scope.clone(), free_vars);
+
+                for (pattern, branch_expr) in branches {
+                    let mut branch_scope = scope.clone();
+                    self.collect_pattern_scope(pattern, &mut branch_scope);
+                    self.collect_free_vars(branch_expr, branch_scope, free_vars);
+                }
+            }
+        }
+    }
+
+    fn collect_pattern_scope(
+        &self,
+        pattern: &ast::Pattern,
+        scope: &mut im::HashSet<DefinitionId>,
+    ) {
+        match &pattern.kind {
+            ast::PatternKind::Variant {
+                type_name: _,
+                variant_name: _,
+                type_definition_id: _,
+                field_patterns,
+            } => {
+                for field_pattern in field_patterns {
+                    self.collect_pattern_scope(field_pattern, scope);
+                }
+            }
+
+            ast::PatternKind::Var {
+                name: _,
+                definition_id,
+            } => {
+                if let Some(def_id) = definition_id {
+                    *scope = scope.update(def_id.clone());
+                }
+            }
+
+            ast::PatternKind::Lit(_) => (),
+            ast::PatternKind::Wild => (),
+        }
+    }
+
+    fn make_match_fail_expr(&self) -> mir::Expr {
+        mir::Expr::Intrinsic {
+            kind: mir::Intrinsic::MatchFail,
+            args: Vec::new(),
+            ints: Vec::new(),
+        }
+    }
+
+    fn make_eq_expr(&self, lhs: mir::Expr, literal: &crate::literal::Literal) -> mir::Expr {
+        let kind = match literal {
+            crate::literal::Literal::Int(_) => mir::Intrinsic::EqInt,
+            crate::literal::Literal::Float(_) => mir::Intrinsic::EqFloat,
+            crate::literal::Literal::Char(_) => mir::Intrinsic::EqChar,
+            crate::literal::Literal::Bool(_) => mir::Intrinsic::EqBool,
+            crate::literal::Literal::String(_) => mir::Intrinsic::EqString,
+            crate::literal::Literal::Unit => mir::Intrinsic::PtrEq,
+        };
+
+        mir::Expr::Intrinsic {
+            kind,
+            args: vec![lhs, mir::Expr::Lit(literal.clone())],
+            ints: Vec::new(),
+        }
+    }
+
+    fn make_tag_expr(&self, scrutinee: mir::Expr, num_fields: i64) -> mir::Expr {
+        mir::Expr::Intrinsic {
+            kind: mir::Intrinsic::VariantTag,
+            args: vec![scrutinee],
+            ints: vec![num_fields],
+        }
+    }
+
+    fn make_field_expr(&self, scrutinee: mir::Expr, index: i64, num_fields: i64) -> mir::Expr {
+        mir::Expr::Intrinsic {
+            kind: mir::Intrinsic::VariantField,
+            args: vec![scrutinee],
+            ints: vec![index, num_fields],
+        }
+    }
+
+    fn build_pattern_comp_expr(
+        &mut self,
+        scrutinee: mir::Expr,
+        pattern: &ast::Pattern,
+        success: mir::Expr,
+        fail: mir::Expr,
+    ) -> mir::Expr {
+        match &pattern.kind {
+            ast::PatternKind::Wild => success,
+
+            ast::PatternKind::Var {
+                name: _,
+                definition_id,
+            } => mir::Expr::Let {
+                name: self.get_mangled_name(definition_id.as_ref().unwrap()),
+                aexpr: Box::new(scrutinee),
+                body: Box::new(success),
+            },
+
+            ast::PatternKind::Lit(literal) => mir::Expr::If {
+                cond: Box::new(self.make_eq_expr(scrutinee, literal)),
+                texpr: Box::new(success),
+                fexpr: Box::new(fail),
+            },
+
+            ast::PatternKind::Variant {
+                type_name: _,
+                variant_name,
+                type_definition_id,
+                field_patterns,
+            } => {
+                let type_definition_id = type_definition_id.as_ref().unwrap();
+                let tag = self.type_variant_tags[type_definition_id][variant_name];
+
+                let num_fields = field_patterns.len() as i64;
+                let tag_expr = self.make_tag_expr(scrutinee.clone(), num_fields);
+                let tag_cond =
+                    self.make_eq_expr(tag_expr, &crate::literal::Literal::Int(tag));
+
+                let mut inner = success;
+                for (i, field_pattern) in field_patterns.iter().enumerate().rev() {
+                    let field_name = self.new_misc_name("field");
+                    let field_expr =
+                        self.make_field_expr(scrutinee.clone(), i as i64, num_fields);
+                    let field_body = self.build_pattern_comp_expr(
+                        mir::Expr::Var(field_name.clone()),
+                        field_pattern,
+                        inner,
+                        fail.clone(),
+                    );
+                    inner = mir::Expr::Let {
+                        name: field_name,
+                        aexpr: Box::new(field_expr),
+                        body: Box::new(field_body),
+                    };
+                }
+
+                mir::Expr::If {
+                    cond: Box::new(tag_cond),
+                    texpr: Box::new(inner),
+                    fexpr: Box::new(fail),
+                }
+            }
         }
     }
 
@@ -201,7 +352,28 @@ impl<'a> Transformer<'a> {
                 fexpr: Box::new(self.transform_expr(fexpr)),
             },
 
-            ast::ExprKind::Match { mexpr, branches } => todo!(),
+            ast::ExprKind::Match { mexpr, branches } => {
+                let scrutinee_name = self.new_misc_name("match");
+                let scrutinee_expr = self.transform_expr(mexpr);
+                let scrutinee_var = mir::Expr::Var(scrutinee_name.clone());
+
+                let mut lowered = self.make_match_fail_expr();
+                for (pattern, branch_expr) in branches.iter().rev() {
+                    let branch_mir = self.transform_expr(branch_expr);
+                    lowered = self.build_pattern_comp_expr(
+                        scrutinee_var.clone(),
+                        pattern,
+                        branch_mir,
+                        lowered,
+                    );
+                }
+
+                mir::Expr::Let {
+                    name: scrutinee_name,
+                    aexpr: Box::new(scrutinee_expr),
+                    body: Box::new(lowered),
+                }
+            }
         }
     }
 
@@ -222,7 +394,17 @@ impl<'a> Transformer<'a> {
                     }
                 }
 
-                ast::ToplevelKind::Type { .. } => (),
+                ast::ToplevelKind::Type { variants, .. } => {
+                    let type_definition_id = toplevel.definition_id.as_ref().unwrap();
+                    let mut variant_tags = HashMap::new();
+
+                    for (i, variant) in variants.iter().enumerate() {
+                        variant_tags.insert(variant.name.clone(), i as i64);
+                    }
+
+                    self.type_variant_tags
+                        .insert(type_definition_id.clone(), variant_tags);
+                }
             }
         }
 

@@ -1,4 +1,7 @@
-use inkwell::values::{AnyValue, BasicValue, BasicValueEnum};
+use inkwell::{
+    values::{AnyValue, BasicValue, BasicValueEnum},
+    IntPredicate,
+};
 
 use crate::mir;
 
@@ -261,6 +264,148 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
 
                 self.compile_expr(body)
             }
+
+            mir::Expr::Intrinsic { kind, args, ints } => match kind {
+                mir::Intrinsic::VariantTag => {
+                    let value = self.compile_expr(&args[0]).into_pointer_value();
+                    let num_fields = *ints
+                        .get(0)
+                        .expect("variant tag intrinsic missing field count") as usize;
+                    let struct_size = num_fields + 1;
+                    let struct_type = self.ptr_struct_type(struct_size);
+                    let tag_ptr = self
+                        .builder
+                        .build_struct_gep(struct_type, value, 0, "_variant_tag_ptr")
+                        .unwrap();
+                    self.builder
+                        .build_load(self.ptr_type(), tag_ptr, "_variant_tag")
+                        .unwrap()
+                }
+
+                mir::Intrinsic::VariantField => {
+                    let value = self.compile_expr(&args[0]).into_pointer_value();
+                    let index = *ints
+                        .get(0)
+                        .expect("variant field intrinsic missing index") as u32;
+                    let num_fields = *ints
+                        .get(1)
+                        .expect("variant field intrinsic missing field count") as usize;
+                    let struct_size = num_fields + 1;
+                    let struct_type = self.ptr_struct_type(struct_size);
+                    let field_ptr = self
+                        .builder
+                        .build_struct_gep(
+                            struct_type,
+                            value,
+                            index + 1,
+                            "_variant_field_ptr",
+                        )
+                        .unwrap();
+                    self.builder
+                        .build_load(self.ptr_type(), field_ptr, "_variant_field")
+                        .unwrap()
+                }
+
+                mir::Intrinsic::PtrEq => {
+                    let left = self.compile_expr(&args[0]).into_pointer_value();
+                    let right = self.compile_expr(&args[1]).into_pointer_value();
+                    let eq = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, left, right, "_ptr_eq")
+                        .unwrap();
+                    self.builder
+                        .build_call(
+                            self.get_function("_fino_bool_new"),
+                            &[eq.into()],
+                            "_ptr_eq_box",
+                        )
+                        .unwrap()
+                        .try_as_basic_value()
+                        .unwrap_left()
+                }
+
+                mir::Intrinsic::EqInt => self
+                    .builder
+                    .build_call(
+                        self.get_function("_fino_int_eq"),
+                        args.into_iter()
+                            .map(|arg| self.compile_expr(arg).into())
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                        "_eq_int_call",
+                    )
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_left(),
+
+                mir::Intrinsic::EqFloat => self
+                    .builder
+                    .build_call(
+                        self.get_function("_fino_float_eq"),
+                        args.into_iter()
+                            .map(|arg| self.compile_expr(arg).into())
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                        "_eq_float_call",
+                    )
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_left(),
+
+                mir::Intrinsic::EqChar => self
+                    .builder
+                    .build_call(
+                        self.get_function("_fino_char_eq"),
+                        args.into_iter()
+                            .map(|arg| self.compile_expr(arg).into())
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                        "_eq_char_call",
+                    )
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_left(),
+
+                mir::Intrinsic::EqBool => self
+                    .builder
+                    .build_call(
+                        self.get_function("_fino_bool_eq"),
+                        args.into_iter()
+                            .map(|arg| self.compile_expr(arg).into())
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                        "_eq_bool_call",
+                    )
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_left(),
+
+                mir::Intrinsic::EqString => self
+                    .builder
+                    .build_call(
+                        self.get_function("_fino_string_eq"),
+                        args.into_iter()
+                            .map(|arg| self.compile_expr(arg).into())
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                        "_eq_string_call",
+                    )
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_left(),
+
+                mir::Intrinsic::MatchFail => self
+                    .builder
+                    .build_call(
+                        self.get_function("_fino_match_fail"),
+                        &[],
+                        "_match_fail_call",
+                    )
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_left(),
+            },
+
         }
     }
 }

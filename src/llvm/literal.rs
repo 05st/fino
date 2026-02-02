@@ -43,7 +43,7 @@ impl<'a, 'ctx> LLVMCodegen<'a, 'ctx> {
             }
 
             Literal::Char(c) => {
-                let char_value = self.context.i8_type().const_int(*c as u64, true);
+                let char_value = self.context.i8_type().const_int(*c as u64, false);
                 self.build_new_literal_call("_fino_char_new", &[char_value.into()])
             }
 

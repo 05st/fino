@@ -1,6 +1,19 @@
 use crate::literal::Literal;
 
 #[derive(Debug, Clone)]
+pub enum Intrinsic {
+    EqInt,
+    EqFloat,
+    EqChar,
+    EqBool,
+    EqString,
+    PtrEq,
+    VariantTag,
+    VariantField,
+    MatchFail,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     Lit(Literal),
     Var(String),
@@ -29,6 +42,11 @@ pub enum Expr {
         name: String,
         aexpr: Box<Expr>,
         body: Box<Expr>,
+    },
+    Intrinsic {
+        kind: Intrinsic,
+        args: Vec<Expr>,
+        ints: Vec<i64>,
     },
 }
 
